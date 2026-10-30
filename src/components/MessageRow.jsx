@@ -3,6 +3,7 @@ import { agentLogos } from '../shared/agentLogos'
 import { contacts, currentUser } from '../data'
 import { Avatar, LinkCard, PrivateDisclaimer, Check, ChainOfThought } from './common'
 import MessageActions from './MessageActions'
+import { canDeleteMessage, canUndoMessage } from '../messageState'
 
 // Office-app icon tiles for adaptive cards that represent generated artifacts.
 // Letter + brand color is enough at this scale; swap in real Fluent app glyphs
@@ -169,7 +170,7 @@ function ThreadReplyBadge({ reply, onClick }) {
   )
 }
 
-export default function MessageRow({ message, activeContact, onOpenThread, onCardAction, onCardInputChange }) {
+export default function MessageRow({ message, activeContact, onOpenThread, onCardAction, onCardInputChange, onDeleteMessage, onUndoDeleteMessage }) {
   const isMe = message.senderId === 'me'
   const isMultiParty = activeContact.isGroup || activeContact.isChannel
   const sender = isMe
@@ -187,12 +188,14 @@ export default function MessageRow({ message, activeContact, onOpenThread, onCar
       return next
     })
   }
-  const reactions = buildReactionList(message.reactions, myReactions)
+  const reactions = message.isDeleted ? [] : buildReactionList(message.reactions, myReactions)
+  const canDelete = !!onDeleteMessage && canDeleteMessage(message)
 
   return (
     <div
       className={`message-row ${isMe ? 'message-mine' : ''}${message.isExtendedTm && !isMe ? ' message-row-review' : ''}`}
       data-message-id={message.id}
+      tabIndex={canDelete ? 0 : undefined}
     >
       {!isMe && (
         <div className="message-avatar-col">
@@ -204,12 +207,15 @@ export default function MessageRow({ message, activeContact, onOpenThread, onCar
           {!isMe && <span className="message-sender-name">{sender.name}</span>}
           <span className="message-timestamp">{message.time}</span>
         </div>
-        <div className={`message-bubble ${message.isPrivate ? 'message-bubble-private' : ''}`}>
-          {!message.isExtendedTm && <MessageActions onReact={toggleReaction} />}
-          {message.isPrivate && <PrivateDisclaimer text={message.privateLabel} />}
-          {message.sharedBy && (
-            <div className="message-shared-by">Shared with the group after review by {message.sharedBy}</div>
+        <div className={`message-bubble ${message.isPrivate ? 'message-bubble-private' : ''}${message.isDeleted ? ' message-bubble-deleted' : ''}`}>
+          {!message.isDeleted && (!message.isExtendedTm || canDelete) && (
+            <MessageActions
+              onReact={toggleReaction}
+              onDelete={canDelete ? () => onDeleteMessage(message) : undefined}
+              restricted={message.isExtendedTm}
+            />
           )}
+          {message.isPrivate && <PrivateDisclaimer text={message.privateLabel} />}
           {message.forwardedFrom && (
             <div className="forwarded-message">
               <div className="forwarded-sender">{message.forwardedFrom.sender}</div>
@@ -222,6 +228,13 @@ export default function MessageRow({ message, activeContact, onOpenThread, onCar
                 typeof part === 'string' ? part : <span key={i} className="mention">{part.name}</span>
               )
             : message.text}
+          {canUndoMessage(message) && onUndoDeleteMessage && (
+            <button
+              type="button"
+              className="message-undo-delete"
+              onClick={() => onUndoDeleteMessage(message)}
+            >Undo</button>
+          )}
           {message.link && <LinkCard link={message.link} />}
           {message.cards && (
             <div className="message-cards">

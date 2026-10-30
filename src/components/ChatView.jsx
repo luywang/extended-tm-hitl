@@ -23,6 +23,7 @@ import PromptSuggestions from './PromptSuggestions'
 import ChannelThreadRail from './ChannelThreadRail'
 import ChatHeader from './ChatHeader'
 import Compose from './Compose'
+import { applyMessageDeletions } from '../messageState'
 import './ChatView.css'
 
 // Convert a channel post (root + replies) into the message shape MessageRow
@@ -89,6 +90,9 @@ export default function ChatView({
   clearNavIntent,
   hitl,
   hitlMessages,
+  deletedMessageKeys,
+  onDeleteMessage,
+  onUndoDeleteMessage,
   onRequestReview,
   onReviewAction,
   onDraftChange,
@@ -111,7 +115,9 @@ export default function ChatView({
   const isAgent = activeContact.isAgent && !activeContact.isGroup
   const isChannel = !!activeContact.isChannel
   const isGroup = !!activeContact.isGroup
-  const channelPosts = isChannel ? channelPostsByContact[activeChatId] || [] : null
+  const channelPosts = isChannel
+    ? applyMessageDeletions(channelPostsByContact[activeChatId] || [], deletedMessageKeys, activeChatId)
+    : null
   const hasSessions = isAgent && sessions[activeChatId]
 
   const [extraMessages, setExtraMessages] = useState({})
@@ -243,11 +249,13 @@ export default function ChatView({
   // session starts with a blank canvas instead of inheriting the previous
   // session's messages. Non-session chats fall back to the chat id.
   const canvasKey = activeSessionId || activeChatId
-  const messages = [
+  const messages = applyMessageDeletions([
     ...displayBaseMessages,
     ...(extraMessages[canvasKey] || []),
     ...(isHitlChat ? hitlMessages : []),
-  ]
+  ], deletedMessageKeys, activeChatId, activeSessionId)
+  const deleteMessage = message => onDeleteMessage(activeChatId, message, activeSessionId)
+  const undoDeleteMessage = message => onUndoDeleteMessage(activeChatId, message, activeSessionId)
   // Messages with `replies` arrays power the threads list/detail view in
   // group chats. Channels use channelPosts for the same purpose.
   const groupThreadablePosts = isGroup ? messages.filter((m) => m.isHitlThread || m.replies?.length > 0) : []
@@ -624,6 +632,8 @@ export default function ChatView({
                   key={post.id}
                   message={postToMessage(post)}
                   activeContact={activeContact}
+                  onDeleteMessage={deleteMessage}
+                  onUndoDeleteMessage={undoDeleteMessage}
                   onOpenThread={() => {
                     if (threadRailOpen && channelThreadPostId === post.id) {
                       setThreadRailOpen(false)
@@ -664,6 +674,8 @@ export default function ChatView({
                     key={msg.id}
                     message={isThreaded ? postToMessage(msg) : msg}
                     activeContact={activeContact}
+                    onDeleteMessage={deleteMessage}
+                    onUndoDeleteMessage={undoDeleteMessage}
                     onCardAction={msg.id === hitl.id ? onReviewAction : undefined}
                     onCardInputChange={msg.id === hitl.id ? onDraftChange : undefined}
                     onOpenThread={isThreaded ? () => {
@@ -734,7 +746,15 @@ export default function ChatView({
           recommended={recommendedAgents}
           selectedAgent={selectedRailAgent}
           onSelectAgent={selectRailAgent}
-          messages={selectedRailAgent ? agentChatMessages[selectedRailAgent.id] || [] : []}
+          messages={selectedRailAgent ? applyMessageDeletions(
+            (agentChatMessages[selectedRailAgent.id] || []).map(message => ({
+              ...message,
+              senderId: message.from === 'me' ? 'me' : selectedRailAgent.id,
+              isPrivate: true,
+            })),
+            deletedMessageKeys, activeChatId, `agent-${selectedRailAgent.id}`,
+          ) : []}
+          onDeleteMessage={message => onDeleteMessage(activeChatId, message, `agent-${selectedRailAgent.id}`)}
           onSendMessage={sendInRail}
           composeHint={railComposeHint}
           typingAgentId={railTypingAgentId}
@@ -749,6 +769,9 @@ export default function ChatView({
           onCardAction={onReviewAction}
           onCardInputChange={onDraftChange}
           typingContact={isHitlChat && hitl.visibility === 'public' && hitl.phase === 'drafting' ? copilotAgent : null}
+          onDeleteMessage={deleteMessage}
+          onUndoDeleteMessage={undoDeleteMessage}
+          deletedMessageKeys={deletedMessageKeys}
           onClose={() => {
             setThreadRailOpen(false)
             setChannelThreadPostId(null)

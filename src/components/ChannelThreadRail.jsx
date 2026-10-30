@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import MessageRow from './MessageRow'
 import { IconButton, ChevronLeft, Close, Dots, Send, PrivateDisclaimer, TypingIndicator } from './common'
+import { applyMessageDeletions } from '../messageState'
 import './ChannelThreadRail.css'
 
 // Right-pane thread view for a channel. Has two modes:
@@ -12,7 +13,7 @@ import './ChannelThreadRail.css'
 // entirely. `initialPostId` opens the rail in detail mode for that post; if
 // it changes from the outside (e.g. an Activity event re-targets the rail),
 // the rail re-syncs to the new thread.
-export default function ChannelThreadRail({ posts, initialPostId, activeContact, onClose, onCardAction, onCardInputChange, typingContact }) {
+export default function ChannelThreadRail({ posts, initialPostId, activeContact, onClose, onCardAction, onCardInputChange, typingContact, onDeleteMessage, onUndoDeleteMessage, deletedMessageKeys }) {
   const [initialPostIdCursor, setInitialPostIdCursor] = useState(initialPostId)
   const [viewPostId, setViewPostId] = useState(initialPostId)
   if (initialPostIdCursor !== initialPostId) {
@@ -25,7 +26,9 @@ export default function ChannelThreadRail({ posts, initialPostId, activeContact,
   const endRef = useRef(null)
 
   const post = viewPostId ? posts.find((p) => p.id === viewPostId) : null
-  const extraReplies = post ? extraRepliesByPost[post.id] || [] : []
+  const extraReplies = post
+    ? applyMessageDeletions(extraRepliesByPost[post.id] || [], deletedMessageKeys, activeContact.id)
+    : []
   const allReplies = post ? [...(post.replies || []), ...extraReplies] : []
   const replyCount = post?.replies?.length || 0
   const extraReplyCount = extraReplies.length
@@ -104,12 +107,16 @@ export default function ChannelThreadRail({ posts, initialPostId, activeContact,
               <MessageRow
                 message={{ ...post, threadReply: undefined }}
                 activeContact={activeContact}
+                onDeleteMessage={onDeleteMessage}
+                onUndoDeleteMessage={onUndoDeleteMessage}
               />
               {allReplies.map((reply) => (
                 <MessageRow
                   key={reply.id}
                   message={reply}
                   activeContact={activeContact}
+                  onDeleteMessage={onDeleteMessage}
+                  onUndoDeleteMessage={onUndoDeleteMessage}
                   onCardAction={reply.isExtendedTm ? onCardAction : undefined}
                   onCardInputChange={reply.isExtendedTm ? onCardInputChange : undefined}
                 />

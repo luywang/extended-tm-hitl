@@ -28,6 +28,7 @@ test('public request visibility survives delivery, editing, approval, and reload
   state = hitlReducer(state, { type: 'share', now: pending.deliveryAt })
   assert.equal(state.visibility, 'public')
   assert.equal(state.sharedText, 'Wait for staging verification.')
+  assert.equal(state.sharedPrompt, undefined)
   assert.equal(hasHitlNotification(state, pending.deliveryAt), false)
 })
 
@@ -52,6 +53,7 @@ test('only delivery creates a notification; sharing publishes the approved edit 
   state = hitlReducer(state, { type: 'save-edit', now })
   state = hitlReducer(state, { type: 'share', now })
   assert.equal(state.sharedText, 'Hold rollout until staging is green.')
+  assert.equal(state.sharedPrompt, pending.prompt)
   assert.equal(state.draftText, '')
   assert.equal(hasHitlNotification(state, now), false)
   assert.equal(state.toastDismissed, false)
@@ -162,4 +164,82 @@ test('blank edits cannot be saved and cancel preserves the original response', (
   state = hitlReducer(state, { type: 'cancel-edit', now })
   assert.equal(state.draftText, 'Kevin owns JIRA-4593.')
   assert.equal(state.editText, null)
+})
+
+test('deleting a review clears draft and edit text, notifications, and stale approval without confirming a decision', () => {
+  const review = deliver()
+  const editing = hitlReducer(review, { type: 'edit', now: review.deliveryAt })
+  const deleted = hitlReducer(editing, {
+    type: 'delete-message', messageId: review.id, now: review.deliveryAt,
+  })
+  assert.equal(deleted.phase, 'deleted')
+  assert.equal(deleted.draftText, '')
+  assert.equal(deleted.editText, null)
+  assert.equal(deleted.unread, false)
+  assert.equal(deleted.toastDismissed, true)
+  assert.equal(deleted.rejectedAt, undefined)
+  assert.equal(hasHitlNotification(deleted, review.deliveryAt), false)
+  assert.equal(hitlReducer(deleted, { type: 'share', now: review.deliveryAt }), deleted)
+  assert.equal(hitlReducer(deleted, { type: 'reject', now: review.deliveryAt }), deleted)
+  assert.deepEqual(restoreHitlState(JSON.stringify(deleted), review.deliveryAt), deleted)
+})
+
+test('deleting an outgoing request removes its stored text but keeps its review and notifications', () => {
+  const pending = request()
+  const deleted = hitlReducer(pending, {
+    type: 'delete-message', messageId: `${pending.id}-request`, now,
+  })
+  assert.equal(deleted.prompt, '')
+  const review = hitlReducer(deleted, { type: 'deliver', id: pending.id, now: pending.deliveryAt })
+  assert.equal(review.phase, 'review')
+  assert.equal(review.draftText, pending.draftText)
+  assert.equal(hasHitlNotification(review, pending.deliveryAt), true)
+  assert.deepEqual(restoreHitlState(JSON.stringify(review), pending.deliveryAt), review)
+})
+
+test('deleting a public request preserves its content for Undo, including across reloads', () => {
+  const review = { ...deliver(), visibility: 'public' }
+  const deleted = hitlReducer(review, {
+    type: 'delete-message', messageId: `${review.id}-request`, now: review.deliveryAt,
+  })
+  assert.equal(deleted.prompt, review.prompt)
+  assert.equal(deleted.phase, 'review')
+  assert.deepEqual(restoreHitlState(JSON.stringify(deleted), review.deliveryAt), review)
+})
+
+test('deleting a shared public response preserves its text for Undo without creating another response', () => {
+  const review = deliver()
+  const shared = hitlReducer(review, { type: 'share', now: review.deliveryAt })
+  const deleted = hitlReducer(shared, {
+    type: 'delete-message', messageId: `${shared.id}-shared`, now: review.deliveryAt,
+  })
+  assert.equal(deleted.phase, 'shared')
+  assert.equal(deleted.sharedText, shared.sharedText)
+  assert.deepEqual(restoreHitlState(JSON.stringify(deleted), review.deliveryAt), shared)
+  assert.equal(hitlReducer(deleted, { type: 'share', now: review.deliveryAt }), deleted)
+})
+
+test('sharing snapshots the private prompt as independent text that survives later TM deletion and reload', () => {
+  const pending = hitlReducer(initialHitlState, {
+    type: 'request', now, visibility: 'private',
+    prompt: 'Draft a Northwind update: include "JIRA-4593" and rollout gates.',
+    draft: 'Kevin owns staging verification.',
+  })
+  const review = hitlReducer(pending, { type: 'deliver', id: pending.id, now: pending.deliveryAt })
+  const shared = hitlReducer(review, { type: 'share', now: review.deliveryAt })
+  assert.equal(shared.sharedPrompt, pending.prompt)
+  const deletedRequest = hitlReducer(shared, {
+    type: 'delete-message', messageId: `${pending.id}-request`, now: review.deliveryAt,
+  })
+  assert.equal(deletedRequest.prompt, '')
+  assert.equal(deletedRequest.sharedPrompt, pending.prompt)
+  assert.equal(deletedRequest.sharedText, 'Kevin owns staging verification.')
+  assert.deepEqual(restoreHitlState(JSON.stringify(deletedRequest), review.deliveryAt), deletedRequest)
+  const legacyShared = { ...shared }
+  delete legacyShared.sharedPrompt
+  const deletedLegacyRequest = hitlReducer(legacyShared, {
+    type: 'delete-message', messageId: `${pending.id}-request`, now: review.deliveryAt,
+  })
+  assert.equal(deletedLegacyRequest.prompt, '')
+  assert.equal(deletedLegacyRequest.sharedPrompt, pending.prompt)
 })

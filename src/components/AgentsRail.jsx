@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect } from 'react'
 import { Avatar, LinkCard, IconButton, PrivateDisclaimer, TypingIndicator, Close, Clock, ChevronLeft, Send } from './common'
 import './AgentsRail.css'
+import MessageActions from './MessageActions'
+import { canDeleteMessage } from '../messageState'
 
 function AgentItem({ agent, onClick }) {
   return (
@@ -30,7 +32,7 @@ function renderText(text) {
   return text
 }
 
-function AgentChat({ agent, messages, onSendMessage, composeHint, isTyping }) {
+function AgentChat({ agent, messages, onSendMessage, onDeleteMessage, composeHint, isTyping }) {
   // Derive the initial input from the compose hint so a prefilled suggestion
   // shows up without a setState-in-effect round trip. Keyed on hint+agent so
   // a new hint or a new agent resets the field.
@@ -75,13 +77,18 @@ function AgentChat({ agent, messages, onSendMessage, composeHint, isTyping }) {
         {messages.map((m) => (
           <div
             key={m.id}
-            className={`agent-chat-row ${m.from === 'me' ? 'agent-chat-row-mine' : ''}`}
+            className={`agent-chat-row ${m.senderId === 'me' ? 'agent-chat-row-mine' : ''}`}
+            data-message-id={m.id}
+            tabIndex={canDeleteMessage(m) ? 0 : undefined}
           >
             <div className="agent-chat-meta">
-              <span className="agent-chat-sender-name">{m.from === 'me' ? 'You' : agent.name}</span>
+              <span className="agent-chat-sender-name">{m.senderId === 'me' ? 'You' : agent.name}</span>
               {m.time && <span className="agent-chat-timestamp">{m.time}</span>}
             </div>
-            <div className="agent-chat-bubble">
+            <div className={`agent-chat-bubble${m.isDeleted ? ' message-bubble-deleted' : ''}`}>
+              {canDeleteMessage(m) && (
+                <MessageActions restricted onDelete={() => onDeleteMessage(m)} />
+              )}
               {renderText(m.text)}
               {m.link && <LinkCard link={m.link} />}
             </div>
@@ -117,7 +124,7 @@ function AgentChat({ agent, messages, onSendMessage, composeHint, isTyping }) {
   )
 }
 
-function AgentDetailView({ agent, messages, onSendMessage, composeHint, isTyping, onBack, onClose }) {
+function AgentDetailView({ agent, messages, onSendMessage, onDeleteMessage, composeHint, isTyping, onBack, onClose }) {
   const sessions = [
     { id: 'current', name: 'Current conversation', time: 'Just now' },
     { id: 'blockers', name: 'Blockers recap', time: 'Yesterday' },
@@ -185,6 +192,7 @@ function AgentDetailView({ agent, messages, onSendMessage, composeHint, isTyping
         agent={agent}
         messages={messages}
         onSendMessage={onSendMessage}
+        onDeleteMessage={onDeleteMessage}
         composeHint={composeHint}
         isTyping={isTyping}
       />
@@ -199,6 +207,7 @@ export default function AgentsRail({
   onSelectAgent,
   messages = [],
   onSendMessage,
+  onDeleteMessage,
   composeHint,
   typingAgentId,
   onClose,
@@ -212,6 +221,7 @@ export default function AgentsRail({
         agent={selectedAgent}
         messages={messages}
         onSendMessage={onSendMessage}
+        onDeleteMessage={onDeleteMessage}
         composeHint={composeHint}
         isTyping={typingAgentId === selectedAgent.id}
         onBack={() => onSelectAgent(null)}

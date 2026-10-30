@@ -257,6 +257,7 @@
 }
 
 .agent-chat-bubble {
+  position: relative;
   font-size: 14px;
   line-height: 20px;
   color: #242424;

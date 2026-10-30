@@ -1,6 +1,11 @@
 import { useState, useCallback, useReducer, useEffect } from 'react'
 import { agentSessions as initialSessions, activityEvents as seedActivityEvents, hitlScenario, currentUser } from './data'
 import { HITL_STORAGE_KEY, hitlReducer, restoreHitlState, hasHitlNotification } from './hitlState'
+import {
+  MESSAGE_DELETIONS_STORAGE_KEY, canDeleteMessage, messageKey,
+  restoreDeletedMessageKeys, isMessageDeleted, isNotificationDeleted,
+  undoMessageDeletion,
+} from './messageState'
 import NavRail from './components/NavRail'
 import ChatList from './components/ChatList'
 import ChatView from './components/ChatView'
@@ -24,6 +29,14 @@ function messageTime(timestamp) {
   })
 }
 
+function loadDeletedMessageKeys() {
+  try {
+    return restoreDeletedMessageKeys(localStorage.getItem(MESSAGE_DELETIONS_STORAGE_KEY))
+  } catch {
+    return []
+  }
+}
+
 function messageLifetime(expiresAt) {
   const date = new Date(expiresAt).toLocaleDateString('en-US', {
     month: 'short', day: 'numeric', timeZone: 'America/Los_Angeles',
@@ -37,6 +50,7 @@ export default function App() {
   const [readChatIds, setReadChatIds] = useState(() => new Set([hitlScenario.chatId]))
   const [activeSlice, setActiveSlice] = useState(null)
   const [hitl, dispatchHitl] = useReducer(hitlReducer, null, loadHitlState)
+  const [deletedMessageKeys, setDeletedMessageKeys] = useState(loadDeletedMessageKeys)
   const [clock, setClock] = useState(() => Date.now())
   const [unavailableNotice, setUnavailableNotice] = useState(false)
   const [sessions, setSessions] = useState(initialSessions)
@@ -64,6 +78,14 @@ export default function App() {
   }, [hitl])
 
   useEffect(() => {
+    try {
+      localStorage.setItem(MESSAGE_DELETIONS_STORAGE_KEY, JSON.stringify(deletedMessageKeys))
+    } catch {
+      // Deletion still works in memory when browser storage is unavailable.
+    }
+  }, [deletedMessageKeys])
+
+  useEffect(() => {
     if (hitl.phase !== 'drafting') return
     const timer = setTimeout(() => {
       dispatchHitl({ type: 'deliver', id: hitl.id, now: Date.now() })
@@ -78,6 +100,10 @@ export default function App() {
       dispatchHitl({ type: 'expire', now })
     }
     const onStorage = (event) => {
+      if (event.key === MESSAGE_DELETIONS_STORAGE_KEY) {
+        setDeletedMessageKeys(restoreDeletedMessageKeys(event.newValue))
+        return
+      }
       if (event.key !== HITL_STORAGE_KEY) return
       const now = Date.now()
       setClock(now)
@@ -147,7 +173,8 @@ export default function App() {
     })
   }, [])
 
-  const targetedEvent = hasHitlNotification(hitl, clock) ? {
+  const reviewDeleted = isMessageDeleted(deletedMessageKeys, hitlScenario.chatId, hitl.id)
+  const targetedEvent = hasHitlNotification(hitl, clock) && !reviewDeleted ? {
     id: `${hitl.id}-notification`,
     type: 'mention',
     actorId: 'copilot',
@@ -159,7 +186,8 @@ export default function App() {
     unread: hitl.unread,
     isTargeted: true,
   } : null
-  const allActivityEvents = targetedEvent ? [targetedEvent, ...activityEvents] : activityEvents
+  const allActivityEvents = (targetedEvent ? [targetedEvent, ...activityEvents] : activityEvents)
+    .filter(event => !isNotificationDeleted(event, deletedMessageKeys))
   const activityUnreadCount = allActivityEvents.reduce((n, e) => n + (e.unread ? 1 : 0), 0)
   const mentionUnreadCount = allActivityEvents.filter(e => e.type === 'mention' && e.unread).length
   const showMentions = () => { setActiveView('chat'); setActiveSlice('mentions') }
@@ -174,6 +202,7 @@ export default function App() {
       isPrivate: hitl.visibility !== 'public',
       isExtendedTm: hitl.visibility !== 'public',
       privateLabel: 'Only you and Copilot can see this message',
+      canUndo: !!hitl.prompt.trim(),
       reactions: hitl.visibility === 'public' ? [{ emoji: '👀', count: 1, label: 'Copilot reacted with Eyes: looking at this message' }] : undefined,
     })
   }
@@ -221,12 +250,15 @@ export default function App() {
     })
   }
   if (hitl.phase === 'shared') {
+    const sharedPrompt = hitl.sharedPrompt ?? hitl.prompt
     hitlMessages.push({
       id: `${hitl.id}-shared`,
       senderId: 'copilot',
-      text: hitl.sharedText,
+      text: hitl.visibility !== 'public' && sharedPrompt
+        ? `${currentUser.name} asked privately: "${sharedPrompt}"\n\n${hitl.sharedText}`
+        : hitl.sharedText,
       time: messageTime(hitl.sharedAt),
-      sharedBy: currentUser.name,
+      canUndo: !!hitl.sharedText?.trim(),
     })
   }
 
@@ -242,10 +274,24 @@ export default function App() {
     dispatchHitl({ type: action, now: Date.now() })
   }
 
+  const deleteMessage = (chatId, message, contextId = null) => {
+    if (!canDeleteMessage(message)) return
+    const key = messageKey(chatId, message.id, contextId)
+    setDeletedMessageKeys(previous => previous.includes(key) ? previous : [...previous, key])
+    if (chatId === hitlScenario.chatId && contextId === null) {
+      dispatchHitl({ type: 'delete-message', messageId: message.id, now: Date.now() })
+    }
+    setUnavailableNotice(false)
+  }
+
   const resetDemo = () => {
     dispatchHitl({ type: 'reset' })
     setUnavailableNotice(false)
     setActiveActivityId(null)
+  }
+
+  const undoDeleteMessage = (chatId, message, contextId = null) => {
+    setDeletedMessageKeys(previous => undoMessageDeletion(previous, chatId, message, contextId))
   }
 
   const openToast = () => {
@@ -303,6 +349,9 @@ export default function App() {
             clearNavIntent={clearNavIntent}
             hitl={hitl}
             hitlMessages={hitlCanvasMessages}
+            deletedMessageKeys={deletedMessageKeys}
+            onDeleteMessage={deleteMessage}
+            onUndoDeleteMessage={undoDeleteMessage}
             onRequestReview={(prompt, visibility) => dispatchHitl({ type: 'request', prompt, visibility, draft: hitlScenario.draft, now: Date.now() })}
             onReviewAction={handleReviewAction}
             onDraftChange={(text) => dispatchHitl({ type: 'change-draft', text, now: Date.now() })}
@@ -321,7 +370,7 @@ export default function App() {
           />
         )}
       </div>
-      {hitl.phase !== 'idle' && hitl.phase !== 'drafting' && !hitl.toastDismissed && (
+      {hitl.phase !== 'idle' && hitl.phase !== 'drafting' && !hitl.toastDismissed && !reviewDeleted && (
         <DesktopToast onOpen={openToast} onDismiss={() => dispatchHitl({ type: 'dismiss-toast' })} />
       )}
       {showFre && (
@@ -343,7 +392,9 @@ export default function App() {
           <h3 className="fre-section-title">3. You control what gets shared</h3>
           <p>Edit the draft or share it with the group. Sharing posts a new group-visible
             response in the original thread for public requests, or in the main chat
-            for private requests, and withdraws the private review card. Choosing
+            for private requests, and withdraws the private review card. For private requests,
+            the public response includes your original prompt as plain text, not a quoted
+            targeted message. Choosing
             Don&apos;t share deletes the draft and its notifications. For public requests,
             Copilot tells the thread you reviewed the response and suggested not sharing
             it at this time. For private requests, Copilot confirms your decision privately.</p>

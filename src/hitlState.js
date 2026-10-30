@@ -86,6 +86,7 @@ export function hitlReducer(previous, action) {
       return state.phase === 'review' && state.editText === null && state.draftText.trim()
         ? {
             ...state, phase: 'shared', sharedText: state.draftText, sharedAt: action.now,
+            ...(state.visibility !== 'public' ? { sharedPrompt: state.prompt } : {}),
             draftText: '', unread: false,
           }
         : state
@@ -97,6 +98,22 @@ export function hitlReducer(previous, action) {
             unread: false, toastDismissed: true,
           }
         : state
+    case 'delete-message':
+      if (state.phase === 'idle') return state
+      if (action.messageId === state.id && state.phase === 'review') {
+        return {
+          ...state, phase: 'deleted', draftText: '', editText: null,
+          unread: false, toastDismissed: true,
+        }
+      }
+      if (action.messageId === `${state.id}-request` && state.visibility !== 'public') {
+        return {
+          ...state,
+          ...(state.phase === 'shared' && state.sharedPrompt === undefined ? { sharedPrompt: state.prompt } : {}),
+          prompt: '',
+        }
+      }
+      return state
     case 'expire':
       return state
     case 'restore':
