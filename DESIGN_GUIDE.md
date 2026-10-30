@@ -147,6 +147,17 @@ Used for the anchor message of an agent thread that's visible only to the user a
 - A thin `1px solid #BDBDBD` border around the whole bubble
 - Background stays the standard mine color (`#E8EBFA`)
 
+### Extended targeted messages: Copilot review
+
+- The Northwind launch HITL demo uses an outgoing private `/Copilot` request and an incoming private Adaptive Card in the **same group chat**, not a private reply thread.
+- Incoming private messages keep the standard `#F5F5F5` bubble, `1px solid #BDBDBD` outline, and `PrivateDisclaimer` saying "Only you can see this message." The review card is white, with a Teams-purple accent, an awaiting-approval badge, and a primary **Share with group** action.
+- Share creates a **new regular group message** and withdraws the private review card. Do not relabel the private card as public. Edit stays private; user deletion is **in scope for Phase 2A**, permanent, and has no undo.
+- The review card's **Reject** action is not deletion. It preserves the private draft with a **Rejected** badge and removes its approval/edit actions. **Copilot sends the user** a new incoming Extended TM confirming the rejection; the user does not send a decision message. The confirmation has its own 30-day lifetime plus buffer from rejection time. Nothing is posted to the group; existing review notifications remain navigable and are marked read.
+- Private TMs do not expose reactions, forwarding, copy-link, pin, or a reply-thread entry point. User deletion and bot withdrawal remove the corresponding Activity and Mentions items and their unread decorations.
+- Desktop notifications are simulated **inside the browser**, using a white bottom-right toast, a subtle gray outline, 8px radius, Copilot avatar, and standard actor/location/preview hierarchy. A delivered toast is not withdrawn on deletion or expiry; clicking a stale toast shows an unavailable-message notice.
+- Mentions is a functional **Quick views** entry in the Chat pane. Its cards reuse the Activity actor, preview, location, and timestamp schema. Read state is shared with Activity and toast click-through.
+- Demo lifetime: notifications last 30 days; the private message gets a **one-day buffer**. Local browser storage preserves progress across reloads and synchronizes tabs; this is not backend device roaming. The buffer is a prototype choice, not a finalized product value.
+
 ### Channel posts
 
 Channel chats render a "Threads" layout. Each post has a `subject` (15px/600) rendered inside the bubble above the body. Posts live in `src/data/channelPosts.js` keyed by channel contact id. Replies are shown in `ChannelThreadRail`, not in the main canvas — the main canvas only shows the root posts.

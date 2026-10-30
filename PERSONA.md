@@ -25,6 +25,7 @@ Reuse these names rather than invent new ones when seeding messages or @mentions
 - **Northwind design & QA:** Sarah Chen (handoff UX + settings), Emma Larsen (QA, staging smoke tests)
 - **Northwind PM & stakeholders:** Rachel Thompson (tech-lead PM on the agent platform — also Alex's primary working peer), Emily Watson (PM on a parallel workstream), Natalie Brooks (newer PM, recently onboarded)
 - **Frequent agents Alex delegates work to:** Jira (ticketing, sprint status, blocker lookups), Claude (architecture rubber-ducking, drafting, code review)
+- **Copilot review scenario:** In Northwind launch, Alex asks Copilot for a private launch readiness draft, reviews or edits it, then approves sharing or rejects it. On rejection, Copilot sends Alex a private confirmation; Alex does not send a decision message. Reuse JIRA-4593, the April 25 milestone, rollout gates, and Rachel's go/no-go checkpoint.
 
 ## Communication style
 
@@ -42,6 +43,7 @@ Reuse these names rather than invent new ones when seeding messages or @mentions
 - **Do not reference:** the repo author, any specific real company, or Microsoft-internal codenames. Clients and coworkers are all fictional. "Northwind Traders" is a well-known generic fictional enterprise and is safe to use.
 - **Avoid placeholder writing:** no `Lorem ipsum`, `Hello world`, `Test user`, `John Smith`, or generic email addresses. If a realistic detail isn't obvious, reuse an existing one from the data rather than invent something new.
 - **Agent voice:**
+  - **Copilot** drafts concise, grounded launch updates. Distinguishes confirmed status from recommendations and never shares a draft with the group before Alex approves.
   - **Jira** replies are terse and structured — quotes ticket ids, statuses, assignees, dates. No fluff.
   - **Claude** replies are thoughtful, push back when scope is unclear, offer 2–3 options with trade-offs, avoid over-confident single answers.
 - **Tone safety:** messages should never be edgy, snarky, or vent about colleagues. This is a public prototype — every message should be demo-safe.

@@ -51,7 +51,7 @@ function resolveEvent(event) {
     contentPreview = snippet(reply?.text || '')
   } else if (event.type === 'mention') {
     actionLabel = `mentioned you in ${chat.isGroup || chat.isChannel ? chat.name : 'a chat'}`
-    contentPreview = snippet(anchorMessage?.text || '')
+    contentPreview = snippet(event.preview || anchorMessage?.text || '')
   }
 
   return { actor, chat, actionLabel, contentPreview, locationLabel }
@@ -83,28 +83,29 @@ const FILTERS = [
   { id: 'tag-mention', label: 'Tag Mentions', match: (e) => e.type === 'tag-mention' },
 ]
 
-export default function ActivityList({ events, activeEventId, onSelectEvent }) {
+export default function ActivityList({ events, activeEventId, onSelectEvent, isMentionsSlice = false }) {
   const [activeFilter, setActiveFilter] = useState(null)
   const toggleFilter = (id) => setActiveFilter((prev) => (prev === id ? null : id))
 
   const resolved = useMemo(() => {
     const filter = FILTERS.find((f) => f.id === activeFilter)
-    const filtered = filter ? events.filter(filter.match) : events
+    const surfaceEvents = isMentionsSlice ? events.filter(e => e.type === 'mention') : events
+    const filtered = filter ? surfaceEvents.filter(filter.match) : surfaceEvents
     return filtered
       .map((event) => {
         const r = resolveEvent(event)
         return r ? { event, ...r } : null
       })
       .filter(Boolean)
-  }, [events, activeFilter])
+  }, [events, activeFilter, isMentionsSlice])
 
   return (
-    <aside className="activity-rail">
+    <aside className={`activity-rail${isMentionsSlice ? ' activity-rail-mentions' : ''}`} aria-label={isMentionsSlice ? 'Mentions slice' : 'Activity feed'}>
       <div className="activity-rail-header">
-        <div className="activity-rail-title">Activity</div>
+        <div className="activity-rail-title">{isMentionsSlice ? 'Mentions' : 'Activity'}</div>
       </div>
       <div className="activity-rail-filters">
-        {FILTERS.map((f) => {
+        {(isMentionsSlice ? FILTERS.slice(0, 1) : FILTERS).map((f) => {
           const isActive = f.id === activeFilter
           return (
             <button
@@ -123,12 +124,14 @@ export default function ActivityList({ events, activeEventId, onSelectEvent }) {
       <div className="activity-rail-list">
         {resolved.length === 0 && (
           <div className="activity-rail-empty">
-            No {FILTERS.find((f) => f.id === activeFilter)?.label.toLowerCase()} notifications.
+            {isMentionsSlice
+              ? `No ${activeFilter === 'unread' ? 'unread ' : ''}mentions. You're all caught up.`
+              : `No ${FILTERS.find((f) => f.id === activeFilter)?.label.toLowerCase() || 'new'} notifications.`}
           </div>
         )}
         {resolved.map(({ event, actor, actionLabel, contentPreview, locationLabel }) => {
           const isSelected = event.id === activeEventId
-          const isUnread = event.unread && !isSelected
+          const isUnread = event.unread
           return (
             <button
               key={event.id}

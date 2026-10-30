@@ -17,6 +17,9 @@ export default function Compose({
   onClearMention,
   onSend,
   isChannel,
+  inputRef,
+  onInvokeCopilot,
+  disabled = false,
 }) {
   const handleKeyDown = (e) => {
     if (e.key === 'Backspace' && value === '' && mention) {
@@ -42,6 +45,8 @@ export default function Compose({
             <span className="mention compose-mention">/{mention}</span>
           )}
           <input
+            ref={inputRef}
+            aria-label="Type a message"
             type="text"
             className="compose-input"
             placeholder={placeholder}
@@ -69,7 +74,7 @@ export default function Compose({
                 <path d="M14.5 10.5l-5 5a3.54 3.54 0 0 1-5-5l7-7a2.36 2.36 0 0 1 3.33 3.33l-7 7a1.18 1.18 0 0 1-1.67-1.67l5-5"/>
               </svg>
             </button>
-            <button className="compose-btn" aria-label="Copilot">
+            <button className="compose-btn" aria-label="Copilot" onClick={onInvokeCopilot}>
               <img src={copilotLogo} alt="Copilot" className="copilot-logo-img-sm" />
             </button>
             <button className="compose-btn" aria-label="More apps">
@@ -78,7 +83,7 @@ export default function Compose({
               </svg>
             </button>
             <div className="compose-divider" />
-            <IconButton label="Send" className="send-btn" onClick={onSend}>
+            <IconButton label="Send" className="send-btn" onClick={onSend} disabled={disabled}>
               <Send />
             </IconButton>
           </div>

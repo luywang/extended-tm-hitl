@@ -49,6 +49,7 @@ export const contacts = [
   { id: 31, name: 'Figma', initials: null, color: '#FFFFFF', status: null, isAgent: true, logo: 'figma', avatar: `${base}avatars/figma.png`, logoInset: true, description: 'Design files and component libraries' },
   { id: 32, name: 'Cowork', initials: null, color: '#FFFFFF', status: null, isAgent: true, logo: 'cowork', avatar: `${base}avatars/cowork.png`, logoInset: true, description: 'Async collaboration and document workflows' },
   { id: 33, name: 'AC Test', initials: 'AC', color: '#5B5FC7', status: null, isGroup: true, memberCount: 5 },
+  { id: 'copilot', name: 'Copilot', isAgent: true, avatar: `${base}avatars/copilot.png`, description: 'AI assistant for Microsoft 365' },
 ]
 
 // Teams the user belongs to. Each team has a list of channels (by contact id,

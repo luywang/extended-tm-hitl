@@ -102,6 +102,11 @@
   color: #6264A7;
 }
 
+.send-btn:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
 /* ── Jira demo flow hint arrows ──
    Kept in CSS for the disabled scripted demo flow in ChatView (JIRA_FLOW_ENABLED).
    Restore the JSX in Compose.jsx if you need them. */

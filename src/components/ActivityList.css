@@ -240,3 +240,52 @@
   background: #5B5FC7;
   flex-shrink: 0;
 }
+
+.activity-rail-mentions {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+  background: #FFFFFF;
+  border-right: none;
+}
+
+.activity-rail-mentions .activity-rail-header {
+  padding: 18px 32px 12px;
+}
+
+.activity-rail-mentions .activity-rail-filters {
+  padding-left: 32px;
+}
+
+.activity-rail-mentions .activity-rail-list {
+  padding: 16px 24px;
+}
+
+.activity-rail-mentions .activity-item {
+  max-width: 860px;
+  margin: 0 auto 10px;
+  padding: 18px 24px;
+  border: 1px solid #E8E8E8;
+  background: #FFFFFF;
+}
+
+.activity-rail-mentions .activity-item:hover {
+  background: #FAFAFA;
+}
+
+.activity-rail-mentions .activity-title {
+  margin-bottom: 4px;
+}
+
+.activity-rail-mentions .activity-preview {
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.activity-rail-mentions .activity-meta {
+  margin-top: 8px;
+}
+
+.activity-rail-mentions .activity-badge {
+  box-shadow: 0 0 0 1.5px #FFFFFF;
+}

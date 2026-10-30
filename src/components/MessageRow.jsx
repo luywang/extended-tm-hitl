@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { agentLogos } from '../shared/agentLogos'
-import { contacts, currentUser } from '../data/contacts'
+import { contacts, currentUser } from '../data'
 import { Avatar, LinkCard, PrivateDisclaimer, Check, ChainOfThought } from './common'
 import MessageActions from './MessageActions'
 
@@ -169,7 +169,7 @@ function ThreadReplyBadge({ reply, onClick }) {
   )
 }
 
-export default function MessageRow({ message, activeContact, onOpenThread }) {
+export default function MessageRow({ message, activeContact, onOpenThread, onCardAction, onCardInputChange }) {
   const isMe = message.senderId === 'me'
   const isMultiParty = activeContact.isGroup || activeContact.isChannel
   const sender = isMe
@@ -191,7 +191,7 @@ export default function MessageRow({ message, activeContact, onOpenThread }) {
 
   return (
     <div
-      className={`message-row ${isMe ? 'message-mine' : ''}`}
+      className={`message-row ${isMe ? 'message-mine' : ''}${message.isExtendedTm && !isMe ? ' message-row-review' : ''}`}
       data-message-id={message.id}
     >
       {!isMe && (
@@ -205,8 +205,11 @@ export default function MessageRow({ message, activeContact, onOpenThread }) {
           <span className="message-timestamp">{message.time}</span>
         </div>
         <div className={`message-bubble ${message.isPrivate ? 'message-bubble-private' : ''}`}>
-          <MessageActions onReact={toggleReaction} />
-          {message.isPrivate && <PrivateDisclaimer />}
+          {!message.isExtendedTm && <MessageActions onReact={toggleReaction} />}
+          {message.isPrivate && <PrivateDisclaimer text={message.privateLabel} />}
+          {message.sharedBy && (
+            <div className="message-shared-by">Shared with the group after review by {message.sharedBy}</div>
+          )}
           {message.forwardedFrom && (
             <div className="forwarded-message">
               <div className="forwarded-sender">{message.forwardedFrom.sender}</div>
@@ -265,6 +268,19 @@ export default function MessageRow({ message, activeContact, onOpenThread }) {
                     </div>
                   )}
 
+                  {card.input && (
+                    <label className="card-input-label">
+                      {card.input.label}
+                      <textarea
+                        className="card-draft-input"
+                        value={card.input.value}
+                        onChange={(event) => onCardInputChange?.(event.target.value)}
+                        rows={12}
+                        autoFocus
+                      />
+                    </label>
+                  )}
+
                   {/* Flat facts at card root (legacy + still useful). */}
                   {card.facts && <CardFacts facts={card.facts} />}
 
@@ -275,7 +291,13 @@ export default function MessageRow({ message, activeContact, onOpenThread }) {
                   {card.actions && (
                     <div className="card-actions">
                       {card.actions.map((action, j) => (
-                        <button key={j} className="card-action-btn">{action}</button>
+                        <button
+                          key={j}
+                          type="button"
+                          className={`card-action-btn${action.primary ? ' card-action-btn-primary' : ''}`}
+                          disabled={action.disabled}
+                          onClick={() => onCardAction?.(action.id)}
+                        >{typeof action === 'string' ? action : action.label}</button>
                       ))}
                     </div>
                   )}
@@ -286,6 +308,7 @@ export default function MessageRow({ message, activeContact, onOpenThread }) {
           {message.chainOfThought && (
             <ChainOfThought steps={message.chainOfThought} />
           )}
+          {message.lifetimeLabel && <div className="card-footer">{message.lifetimeLabel}</div>}
         </div>
         {reactions.length > 0 && (
           <div className="message-reactions-bar">

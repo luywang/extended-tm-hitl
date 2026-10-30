@@ -50,9 +50,13 @@ function SectionHeader({ label, collapsed, onToggle }) {
   )
 }
 
-export default function ChatList({ activeChatId, onSelectChat, readChatIds }) {
+export default function ChatList({
+  activeChatId, onSelectChat, readChatIds, activeSlice, onShowMentions,
+  mentionUnreadCount = 0, targetedUnreadChatId,
+}) {
   const isUnread = (bold, contactId) => bold && !readChatIds?.has(contactId)
   const [collapsed, setCollapsed] = useState(() => new Set())
+  const [quickViewsOpen, setQuickViewsOpen] = useState(true)
   const isCollapsed = (key) => collapsed.has(key)
   const toggleSection = (key) => setCollapsed((prev) => {
     const next = new Set(prev)
@@ -63,11 +67,11 @@ export default function ChatList({ activeChatId, onSelectChat, readChatIds }) {
 
   const renderItem = (chat) => {
     const contact = contacts.find(c => c.id === chat.contactId)
-    const unread = isUnread(chat.bold, contact.id)
+    const unread = contact.id === targetedUnreadChatId || isUnread(chat.bold, contact.id)
     return (
       <div
         key={contact.id}
-        className={`chat-list-item ${contact.id === activeChatId ? 'selected' : ''}`}
+        className={`chat-list-item ${!activeSlice && contact.id === activeChatId ? 'selected' : ''}`}
         onClick={() => onSelectChat(contact.id)}
       >
         <Avatar contact={contact} size={20} />
@@ -127,14 +131,30 @@ export default function ChatList({ activeChatId, onSelectChat, readChatIds }) {
           </div>
           <span className="pinned-label">Copilot</span>
         </div>
-        <div className="pinned-item">
+        <button
+          type="button"
+          className="pinned-item quick-views-toggle"
+          aria-expanded={quickViewsOpen}
+          onClick={() => setQuickViewsOpen(prev => !prev)}
+        >
           {/* Right-facing chevron: rotate the shared ChevronDown. */}
-          <span className="section-chevron section-chevron-right">
+          <span className={`section-chevron${quickViewsOpen ? '' : ' section-chevron-right'}`}>
             <ChevronDown size={12} />
           </span>
           <span className="pinned-label pinned-label-bold">Quick views</span>
-          <span className="quick-views-badge">46</span>
-        </div>
+        </button>
+        {quickViewsOpen && (
+          <button
+            type="button"
+            className={`mentions-slice-link${activeSlice === 'mentions' ? ' mentions-slice-link-selected' : ''}`}
+            onClick={onShowMentions}
+            aria-pressed={activeSlice === 'mentions'}
+          >
+            <span className="mentions-slice-icon" aria-hidden="true">@</span>
+            <span className={mentionUnreadCount ? 'pinned-label-bold' : ''}>Mentions</span>
+            {mentionUnreadCount > 0 && <span className="quick-views-badge">{mentionUnreadCount}</span>}
+          </button>
+        )}
       </div>
 
       <div className="chat-list-divider" />

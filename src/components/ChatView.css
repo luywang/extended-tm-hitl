@@ -170,6 +170,99 @@
   border: 1px solid #BDBDBD;
 }
 
+.message-row-review .message-content-wrap {
+  width: 620px;
+  max-width: 90%;
+}
+
+.message-row-review .adaptive-card {
+  margin-top: 12px;
+  background: #FFFFFF;
+}
+
+.message-row-review .card-section-text {
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.message-row-review .card-actions {
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.message-row-review .card-action-btn {
+  padding: 6px 12px;
+  font-size: 14px;
+  line-height: 20px;
+  border: 1px solid #D1D1D1;
+  border-radius: 4px;
+  background: #FFFFFF;
+  color: #242424;
+}
+
+.message-row-review .card-action-btn:hover {
+  background: #F5F5F5;
+  text-decoration: none;
+}
+
+.hitl-compose-disclaimer {
+  padding: 4px 24px 0;
+  max-width: 920px;
+  margin: 0 auto;
+}
+
+.message-shared-by {
+  color: #616161;
+  font-size: 11px;
+  margin-bottom: 6px;
+}
+
+.card-input-label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 12px 0;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.card-draft-input {
+  width: 100%;
+  min-height: 240px;
+  resize: vertical;
+  padding: 10px;
+  border: 1px solid #D1D1D1;
+  border-radius: 4px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 20px;
+  color: #242424;
+  background: #FFFFFF;
+}
+
+.card-draft-input:focus {
+  outline: 2px solid #5B5FC7;
+  outline-offset: -2px;
+}
+
+.message-row-review .card-action-btn-primary {
+  background: #5B5FC7;
+  border-color: #5B5FC7;
+  color: #FFFFFF;
+}
+
+.message-row-review .card-action-btn-primary:hover {
+  background: #4F52B2;
+  color: #FFFFFF;
+}
+
+.message-bubble .card-action-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 /* PrivateDisclaimer base styles live in components/common/PrivateDisclaimer.css;
    inside message bubbles we add a little breathing room below. */
 .message-bubble .private-disclaimer {

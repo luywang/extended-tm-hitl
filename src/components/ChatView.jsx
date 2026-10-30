@@ -12,8 +12,10 @@ import {
   designerAgent,
   pollyAgent,
   breakthuAgent,
+  hitlScenario,
 } from '../data'
-import { TypingIndicator } from './common'
+import { Info, PrivateDisclaimer, TypingIndicator } from './common'
+import { HitlDemoBar } from './HitlDemo'
 import MessageRow from './MessageRow'
 import SessionsRail from './SessionsRail'
 import AgentsRail from './AgentsRail'
@@ -42,8 +44,8 @@ function postToMessage(post) {
 }
 
 function parseDraft(d) {
-  const m = d.match(/^\/Jira\b\s*/i)
-  return m ? { mention: 'Jira', text: d.slice(m[0].length) } : { mention: null, text: d }
+  const m = d.match(/^\/(Jira|Copilot)\b\s*/i)
+  return m ? { mention: m[1], text: d.slice(m[0].length) } : { mention: null, text: d }
 }
 
 // ── Scripted Jira demo flow (disabled) ─────────────────────────────────────
@@ -85,6 +87,15 @@ export default function ChatView({
   dynamicSessionMessages,
   navIntent,
   clearNavIntent,
+  hitl,
+  hitlMessages,
+  onRequestReview,
+  onReviewAction,
+  onDraftChange,
+  onResetDemo,
+  onShowActivity,
+  onShowMentions,
+  unavailableNotice,
 }) {
   const activeContact = contacts.find((c) => c.id === activeChatId)
   const baseMessages = messagesByContact[activeChatId] || []
@@ -93,7 +104,8 @@ export default function ChatView({
     : 2
   const allChats = [...favorites, ...projectNorthwind, ...chatList]
   const chatEntry = allChats.find((c) => c.contactId === activeChatId)
-  const draft = chatEntry?.draft || ''
+  const isHitlChat = activeChatId === hitlScenario.chatId
+  const draft = chatEntry?.draft || (isHitlChat && hitl.phase === 'idle' ? `/Copilot ${hitlScenario.prompt}` : '')
   const parsedDraft = parseDraft(draft)
 
   const isAgent = activeContact.isAgent && !activeContact.isGroup
@@ -120,6 +132,7 @@ export default function ChatView({
   const [threadRailOpen, setThreadRailOpen] = useState(false)
   const [highlightMessageId, setHighlightMessageId] = useState(null)
   const messagesEndRef = useRef(null)
+  const composeRef = useRef(null)
 
   // Reset per-chat ephemeral state when activeChatId changes. Using the
   // render-phase state-adjustment pattern (rather than useEffect) avoids the
@@ -157,7 +170,6 @@ export default function ChatView({
     if (intentMatches && navIntent.highlightMessageId) {
       setHighlightMessageId(navIntent.highlightMessageId)
     }
-    if (intentMatches) clearNavIntent()
   } else if (navIntent !== navIntentCursor && navIntent?.chatId === activeChatId) {
     setNavIntentCursor(navIntent)
     if ('sessionId' in navIntent) {
@@ -171,8 +183,11 @@ export default function ChatView({
     if (navIntent.highlightMessageId) {
       setHighlightMessageId(navIntent.highlightMessageId)
     }
-    clearNavIntent()
   }
+
+  useEffect(() => {
+    if (navIntent?.chatId === activeChatId) clearNavIntent()
+  }, [navIntent, activeChatId, clearNavIntent])
 
   useEffect(() => {
     if (highlightMessageId) {
@@ -193,7 +208,7 @@ export default function ChatView({
       return
     }
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [extraMessages, activeChatId, activeSessionId, mainTypingAgentId, highlightMessageId])
+  }, [extraMessages, activeChatId, activeSessionId, mainTypingAgentId, highlightMessageId, hitl.phase])
 
   // Mirror the rail's Jira thread messages back into the source chat's
   // session so the conversation is discoverable from Jira's sessions list.
@@ -218,7 +233,11 @@ export default function ChatView({
   // session starts with a blank canvas instead of inheriting the previous
   // session's messages. Non-session chats fall back to the chat id.
   const canvasKey = activeSessionId || activeChatId
-  const messages = [...displayBaseMessages, ...(extraMessages[canvasKey] || [])]
+  const messages = [
+    ...displayBaseMessages,
+    ...(extraMessages[canvasKey] || []),
+    ...(isHitlChat ? hitlMessages : []),
+  ]
   // Messages with `replies` arrays power the threads list/detail view in
   // group chats. Channels use channelPosts for the same purpose.
   const groupThreadablePosts = isGroup ? messages.filter((m) => m.replies?.length > 0) : []
@@ -454,6 +473,14 @@ export default function ChatView({
     const sentText = composeMention
       ? `/${composeMention}${inputValue ? ' ' + inputValue.trimStart() : ''}`
       : inputValue
+    if (isHitlChat && /^[/@]Copilot\b/i.test(sentText)) {
+      const prompt = sentText.replace(/^[/@]Copilot\b\s*/i, '').trim()
+      if (hitl.phase !== 'idle' || !prompt) return
+      onRequestReview(prompt)
+      setInputValue('')
+      setComposeMention(null)
+      return
+    }
     setInputValue('')
     setComposeMention(null)
 
@@ -552,6 +579,26 @@ export default function ChatView({
           }}
         />
 
+        {isHitlChat && (
+          <HitlDemoBar
+            phase={hitl.phase}
+            onDraft={() => {
+              setComposeMention('Copilot')
+              setInputValue(hitlScenario.prompt)
+              composeRef.current?.focus()
+            }}
+            onReset={onResetDemo}
+            onShowActivity={onShowActivity}
+            onShowMentions={onShowMentions}
+          />
+        )}
+        {isHitlChat && unavailableNotice && (
+          <div className="hitl-unavailable" role="status">
+            <Info size={18} />
+            This private message is no longer available. It was deleted, withdrawn, or expired.
+          </div>
+        )}
+
         <div className="chat-messages">
           {isChannel ? (
             <div className="messages-container messages-container-channel">
@@ -600,6 +647,8 @@ export default function ChatView({
                     key={msg.id}
                     message={isThreaded ? postToMessage(msg) : msg}
                     activeContact={activeContact}
+                    onCardAction={msg.id === hitl.id ? onReviewAction : undefined}
+                    onCardInputChange={msg.id === hitl.id ? onDraftChange : undefined}
                     onOpenThread={isThreaded ? () => {
                       if (threadRailOpen && channelThreadPostId === msg.id) {
                         setThreadRailOpen(false)
@@ -618,11 +667,19 @@ export default function ChatView({
         </div>
 
         <div className="chat-compose-area">
+          {isHitlChat && hitl.phase === 'drafting' && (
+            <TypingIndicator contact={copilotAgent} className="chat-compose-typing" />
+          )}
           {mainTypingAgentId === activeChatId && (
             <TypingIndicator
               contact={activeContact}
               className="chat-compose-typing"
             />
+          )}
+          {isHitlChat && composeMention?.toLowerCase() === 'copilot' && (
+            <div className="hitl-compose-disclaimer">
+              <PrivateDisclaimer text="Send privately to Copilot. The group won't see your request." />
+            </div>
           )}
           <Compose
             value={inputValue}
@@ -631,6 +688,14 @@ export default function ChatView({
             onClearMention={() => setComposeMention(null)}
             onSend={handleSend}
             isChannel={isChannel}
+            inputRef={composeRef}
+            onInvokeCopilot={isHitlChat ? () => {
+              if (hitl.phase !== 'idle') return
+              setComposeMention('Copilot')
+              if (!inputValue.trim()) setInputValue(hitlScenario.prompt)
+              composeRef.current?.focus()
+            } : undefined}
+            disabled={isHitlChat && /^[/@]Copilot\b/i.test(composeMention ? `/${composeMention}` : inputValue) && hitl.phase !== 'idle'}
           />
         </div>
       </div>

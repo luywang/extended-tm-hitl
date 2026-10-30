@@ -3,6 +3,7 @@ const base = import.meta.env.BASE_URL
 export const copilotAgent = {
   id: 'copilot',
   name: 'Copilot',
+  isAgent: true,
   avatar: `${base}avatars/copilot.png`,
   description: 'AI assistant for Microsoft 365',
 }
