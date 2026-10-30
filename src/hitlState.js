@@ -7,8 +7,9 @@ export function expireHitl(state, now) {
   if (state.phase === 'review' && now >= state.expiresAt) {
     return { ...state, phase: 'expired', draftText: '', editText: null, unread: false }
   }
-  if (state.phase === 'rejected' && now >= state.expiresAt && state.draftText) {
-    return { ...state, draftText: '', unread: false }
+  if (state.phase === 'rejected' &&
+      (state.draftText || state.editText !== null || state.unread || !state.toastDismissed)) {
+    return { ...state, draftText: '', editText: null, unread: false, toastDismissed: true }
   }
   if (state.unread && now >= state.notificationExpiresAt) {
     return { ...state, unread: false }
@@ -47,6 +48,7 @@ export function hitlReducer(previous, action) {
         phase: 'drafting',
         id: `extended-tm-${action.now}`,
         prompt: action.prompt.trim(),
+        visibility: action.visibility === 'public' ? 'public' : 'private',
         requestedAt: action.now,
         deliveryAt,
         notificationExpiresAt: deliveryAt + 30 * DAY,
@@ -91,7 +93,8 @@ export function hitlReducer(previous, action) {
       return state.phase === 'review'
         ? {
             ...state, phase: 'rejected', rejectedAt: action.now,
-            rejectionExpiresAt: action.now + 31 * DAY, editText: null, unread: false,
+            rejectionExpiresAt: action.now + 31 * DAY, draftText: '', editText: null,
+            unread: false, toastDismissed: true,
           }
         : state
     case 'expire':
@@ -106,5 +109,5 @@ export function hitlReducer(previous, action) {
 }
 
 export function hasHitlNotification(state, now) {
-  return ['review', 'rejected'].includes(state.phase) && now < state.notificationExpiresAt
+  return state.phase === 'review' && now < state.notificationExpiresAt
 }

@@ -25,7 +25,7 @@ Reuse these names rather than invent new ones when seeding messages or @mentions
 - **Northwind design & QA:** Sarah Chen (handoff UX + settings), Emma Larsen (QA, staging smoke tests)
 - **Northwind PM & stakeholders:** Rachel Thompson (tech-lead PM on the agent platform — also Alex's primary working peer), Emily Watson (PM on a parallel workstream), Natalie Brooks (newer PM, recently onboarded)
 - **Frequent agents Alex delegates work to:** Jira (ticketing, sprint status, blocker lookups), Claude (architecture rubber-ducking, drafting, code review)
-- **Copilot review scenario:** In Northwind launch, Alex asks Copilot for a private launch readiness draft, reviews or edits it, then approves sharing or rejects it. On rejection, Copilot sends Alex a private confirmation; Alex does not send a decision message. Reuse JIRA-4593, the April 25 milestone, rollout gates, and Rachel's go/no-go checkpoint.
+- **Copilot review scenario:** In Northwind launch, Alex chooses to send the launch-readiness request privately or publicly to Copilot. For public requests, Copilot acknowledges with an Eyes reaction and sends Alex a private Extended TM in the request's thread. Private requests receive their draft in the group canvas. Alex reviews or edits the private draft, then approves sharing or chooses **Don't share**. Don't share deletes the review TM and its notifications. For public requests, Copilot publicly tells the thread that Alex reviewed its response and suggested not sharing it at this time, without revealing the draft. For private requests, Copilot confirms privately. Alex does not send a decision message. Reuse JIRA-4593, the April 25 milestone, rollout gates, and Rachel's go/no-go checkpoint.
 
 ## Communication style
 

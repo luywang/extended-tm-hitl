@@ -94,6 +94,16 @@
   display: none;
 }
 
+.channel-thread-rail-private {
+  padding: 12px 16px;
+  border-bottom: 1px solid #E8E8E8;
+}
+
+.channel-thread-rail .message-row-review .message-content-wrap {
+  width: 100%;
+  max-width: 100%;
+}
+
 /* Reuse the messages-container spacing rhythm from the main canvas so rows
    render identically. `.messages-container`'s max-width/padding is meant for
    the full canvas; we override padding to fit the narrower rail. */

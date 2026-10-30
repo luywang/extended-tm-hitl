@@ -125,7 +125,7 @@ function CardBars({ bars }) {
 function buildReactionList(baseReactions, myEmojis) {
   const map = new Map()
   for (const r of baseReactions || []) {
-    map.set(r.emoji, { emoji: r.emoji, count: r.count, byMe: false })
+    map.set(r.emoji, { emoji: r.emoji, count: r.count, label: r.label, byMe: false })
   }
   for (const emoji of myEmojis) {
     const existing = map.get(emoji)
@@ -318,7 +318,8 @@ export default function MessageRow({ message, activeContact, onOpenThread, onCar
                 type="button"
                 className={`reaction-pill ${r.byMe ? 'reaction-pill-mine' : ''}`}
                 onClick={() => toggleReaction(r.emoji)}
-                aria-label={`${r.byMe ? 'Remove' : 'Add'} reaction ${r.emoji}`}
+                title={r.label}
+                aria-label={r.label ? `${r.label}. ${r.byMe ? 'Remove' : 'Add'} your reaction` : `${r.byMe ? 'Remove' : 'Add'} reaction ${r.emoji}`}
               >
                 <span aria-hidden="true">{r.emoji}</span>
                 {r.count > 1 && <span className="reaction-pill-count">{r.count}</span>}

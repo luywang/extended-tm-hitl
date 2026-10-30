@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import MessageRow from './MessageRow'
-import { IconButton, ChevronLeft, Close, Dots, Send } from './common'
+import { IconButton, ChevronLeft, Close, Dots, Send, PrivateDisclaimer, TypingIndicator } from './common'
 import './ChannelThreadRail.css'
 
 // Right-pane thread view for a channel. Has two modes:
@@ -12,7 +12,7 @@ import './ChannelThreadRail.css'
 // entirely. `initialPostId` opens the rail in detail mode for that post; if
 // it changes from the outside (e.g. an Activity event re-targets the rail),
 // the rail re-syncs to the new thread.
-export default function ChannelThreadRail({ posts, initialPostId, activeContact, onClose }) {
+export default function ChannelThreadRail({ posts, initialPostId, activeContact, onClose, onCardAction, onCardInputChange, typingContact }) {
   const [initialPostIdCursor, setInitialPostIdCursor] = useState(initialPostId)
   const [viewPostId, setViewPostId] = useState(initialPostId)
   if (initialPostIdCursor !== initialPostId) {
@@ -27,10 +27,12 @@ export default function ChannelThreadRail({ posts, initialPostId, activeContact,
   const post = viewPostId ? posts.find((p) => p.id === viewPostId) : null
   const extraReplies = post ? extraRepliesByPost[post.id] || [] : []
   const allReplies = post ? [...(post.replies || []), ...extraReplies] : []
+  const replyCount = post?.replies?.length || 0
+  const extraReplyCount = extraReplies.length
 
   useEffect(() => {
-    if (post) endRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [extraReplies, post?.id])
+    if (viewPostId) endRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [extraReplyCount, viewPostId, replyCount])
 
   const flattenSubject = (p) => {
     if (p.subject) return p.subject
@@ -93,6 +95,11 @@ export default function ChannelThreadRail({ posts, initialPostId, activeContact,
       {post ? (
         <>
           <div className="channel-thread-rail-body">
+            {post.isHitlThread && (typingContact || allReplies.some(reply => reply.isPrivate)) && (
+              <div className="channel-thread-rail-private">
+                <PrivateDisclaimer text="Copilot's draft is only visible to you. Your original request is public." />
+              </div>
+            )}
             <div className="channel-thread-rail-messages">
               <MessageRow
                 message={{ ...post, threadReply: undefined }}
@@ -103,8 +110,11 @@ export default function ChannelThreadRail({ posts, initialPostId, activeContact,
                   key={reply.id}
                   message={reply}
                   activeContact={activeContact}
+                  onCardAction={reply.isExtendedTm ? onCardAction : undefined}
+                  onCardInputChange={reply.isExtendedTm ? onCardInputChange : undefined}
                 />
               ))}
+              {post.isHitlThread && typingContact && <TypingIndicator contact={typingContact} />}
               <div ref={endRef} />
             </div>
           </div>
@@ -114,7 +124,8 @@ export default function ChannelThreadRail({ posts, initialPostId, activeContact,
               <input
                 type="text"
                 className="channel-thread-rail-input"
-                placeholder="Reply"
+                placeholder={post.isHitlThread ? 'Reply publicly in thread' : 'Reply'}
+                aria-label="Reply publicly in thread"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={onKeyDown}

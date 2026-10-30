@@ -2,7 +2,8 @@ export const hitlScenario = {
   chatId: 23,
   prompt: 'Draft a launch readiness update from this chat. Include the open blocker, rollout gates, and next checkpoint. Let me review it before sharing.',
   preview: 'Your launch update is ready to review. Only you can see this draft.',
-  rejection: 'You rejected this launch update. I haven\'t shared it with the group.',
+  rejection: 'You chose not to share this launch update. I\'ve deleted the private draft and haven\'t shared it with the group.',
+  publicRejection: 'reviewed my response to this request and suggested that I don\'t share it at this time.',
   draft: [
     'April 25 launch readiness',
     '',

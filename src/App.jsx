@@ -153,6 +153,7 @@ export default function App() {
     actorId: 'copilot',
     chatId: hitlScenario.chatId,
     messageId: hitl.id,
+    postId: hitl.visibility === 'public' ? `${hitl.id}-request` : null,
     preview: hitlScenario.preview,
     time: messageTime(hitl.deliveryAt),
     unread: hitl.unread,
@@ -164,26 +165,24 @@ export default function App() {
   const showMentions = () => { setActiveView('chat'); setActiveSlice('mentions') }
 
   const hitlMessages = []
-  if (hitl.phase !== 'idle' && clock < hitl.expiresAt) {
+  if (hitl.phase !== 'idle' && (hitl.visibility === 'public' || clock < hitl.expiresAt)) {
     hitlMessages.push({
       id: `${hitl.id}-request`,
       senderId: 'me',
-      text: [{ type: 'mention', name: '/Copilot' }, ` ${hitl.prompt}`],
+      text: [{ type: 'mention', name: hitl.visibility === 'public' ? '@Copilot' : '/Copilot' }, ` ${hitl.prompt}`],
       time: messageTime(hitl.requestedAt),
-      isPrivate: true,
-      isExtendedTm: true,
+      isPrivate: hitl.visibility !== 'public',
+      isExtendedTm: hitl.visibility !== 'public',
       privateLabel: 'Only you and Copilot can see this message',
+      reactions: hitl.visibility === 'public' ? [{ emoji: '👀', count: 1, label: 'Copilot reacted with Eyes: looking at this message' }] : undefined,
     })
   }
-  if (['review', 'rejected'].includes(hitl.phase) && clock < hitl.expiresAt) {
-    const rejected = hitl.phase === 'rejected'
+  if (hitl.phase === 'review' && clock < hitl.expiresAt) {
     const editing = hitl.editText !== null
     hitlMessages.push({
       id: hitl.id,
       senderId: 'copilot',
-      text: [{ type: 'mention', name: currentUser.name }, rejected
-        ? ', you rejected this launch update. Nothing was shared with the group.'
-        : ', your launch update is ready. Review it before sharing.'],
+      text: [{ type: 'mention', name: currentUser.name }, ', your launch update is ready. Review it before sharing.'],
       time: messageTime(hitl.deliveryAt),
       isPrivate: true,
       isExtendedTm: true,
@@ -192,33 +191,33 @@ export default function App() {
         title: 'Launch readiness update',
         subtitle: 'Review for Northwind launch',
         accentColor: '#5B5FC7',
-        badge: rejected
-          ? { text: 'Rejected', tone: 'neutral' }
-          : { text: 'Awaiting your approval', tone: 'amber' },
+        badge: { text: 'Awaiting your approval', tone: 'amber' },
         sections: editing ? [] : [{ text: hitl.draftText }],
         input: editing ? { label: 'Edit draft for the group', value: hitl.editText } : null,
         footer: messageLifetime(hitl.expiresAt),
-        actions: rejected ? null : editing ? [
+        actions: editing ? [
           { id: 'save-edit', label: 'Save changes', primary: true, disabled: !hitl.editText.trim() },
           { id: 'cancel-edit', label: 'Cancel' },
         ] : [
           { id: 'share', label: 'Share with group', primary: true },
           { id: 'edit', label: 'Edit draft' },
-          { id: 'reject', label: 'Reject' },
+          { id: 'reject', label: "Don't share" },
         ],
       }],
     })
   }
-  if (hitl.phase === 'rejected' && clock < hitl.rejectionExpiresAt) {
+  if (hitl.phase === 'rejected' && (hitl.visibility === 'public' || clock < hitl.rejectionExpiresAt)) {
     hitlMessages.push({
       id: `${hitl.id}-rejection`,
       senderId: 'copilot',
-      text: hitlScenario.rejection,
+      text: hitl.visibility === 'public'
+        ? `${currentUser.name} ${hitlScenario.publicRejection}`
+        : hitlScenario.rejection,
       time: messageTime(hitl.rejectedAt),
-      isPrivate: true,
-      isExtendedTm: true,
+      isPrivate: hitl.visibility !== 'public',
+      isExtendedTm: hitl.visibility !== 'public',
       privateLabel: 'Only you can see this message',
-      lifetimeLabel: messageLifetime(hitl.rejectionExpiresAt),
+      lifetimeLabel: hitl.visibility === 'public' ? undefined : messageLifetime(hitl.rejectionExpiresAt),
     })
   }
   if (hitl.phase === 'shared') {
@@ -230,6 +229,14 @@ export default function App() {
       sharedBy: currentUser.name,
     })
   }
+
+  const hitlCanvasMessages = hitl.visibility === 'public'
+    ? hitlMessages.filter(message => message.id === `${hitl.id}-request`).map(message => ({
+        ...message,
+        isHitlThread: true,
+        replies: hitlMessages.filter(reply => reply.id !== message.id),
+      }))
+    : hitlMessages
 
   const handleReviewAction = (action) => {
     dispatchHitl({ type: action, now: Date.now() })
@@ -246,8 +253,12 @@ export default function App() {
     selectChat(hitlScenario.chatId)
     dispatchHitl({ type: 'dismiss-toast' })
     dispatchHitl({ type: 'read', now: Date.now() })
-    if (['review', 'rejected'].includes(hitl.phase) && Date.now() < hitl.expiresAt) {
-      setNavIntent({ chatId: hitlScenario.chatId, highlightMessageId: hitl.id })
+    if (hitl.phase === 'review' && Date.now() < hitl.expiresAt) {
+      setNavIntent({
+        chatId: hitlScenario.chatId,
+        highlightMessageId: hitl.id,
+        channelThreadPostId: hitl.visibility === 'public' ? `${hitl.id}-request` : null,
+      })
     } else {
       setUnavailableNotice(true)
     }
@@ -291,8 +302,8 @@ export default function App() {
             navIntent={navIntent}
             clearNavIntent={clearNavIntent}
             hitl={hitl}
-            hitlMessages={hitlMessages}
-            onRequestReview={(prompt) => dispatchHitl({ type: 'request', prompt, draft: hitlScenario.draft, now: Date.now() })}
+            hitlMessages={hitlCanvasMessages}
+            onRequestReview={(prompt, visibility) => dispatchHitl({ type: 'request', prompt, visibility, draft: hitlScenario.draft, now: Date.now() })}
             onReviewAction={handleReviewAction}
             onDraftChange={(text) => dispatchHitl({ type: 'change-draft', text, now: Date.now() })}
             onResetDemo={resetDemo}
@@ -321,17 +332,21 @@ export default function App() {
           dismissLabel="Try the demo"
         >
           <h3 className="fre-section-title">1. Ask Copilot</h3>
-          <p>In Northwind launch, send the prepared request for a launch readiness update.
-            Your request goes privately to Copilot, not the group.</p>
+          <p>In Northwind launch, choose Send privately to Copilot or Send publicly to
+            Copilot to populate the compose box. Review or edit the request, then click
+            Send. Public requests are visible to the group; Copilot reacts with Eyes
+            to show it is looking at your message, then sends your private draft in its thread.</p>
           <h3 className="fre-section-title">2. Get notified and review</h3>
           <p>A desktop toast, Activity item, and Mentions card lead to the same private
             response. Extended targeted messages last 30 days plus a buffer, so review
             doesn&apos;t have to happen right away.</p>
           <h3 className="fre-section-title">3. You control what gets shared</h3>
           <p>Edit the draft or share it with the group. Sharing posts a new group-visible
-            response and withdraws the private review card. Rejecting keeps the draft
-            private. Copilot sends you an Extended targeted message confirming your
-            decision. Nothing is shared with the group.</p>
+            response in the original thread for public requests, or in the main chat
+            for private requests, and withdraws the private review card. Choosing
+            Don&apos;t share deletes the draft and its notifications. For public requests,
+            Copilot tells the thread you reviewed the response and suggested not sharing
+            it at this time. For private requests, Copilot confirms your decision privately.</p>
           <p className="fre-modal-footnote">Interactive prototype with mocked content and an
             in-app desktop toast. Progress survives reloads in this browser; real device
             roaming and OS notifications require the Teams service.</p>

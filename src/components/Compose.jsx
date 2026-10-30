@@ -13,6 +13,7 @@ import './Compose.css'
 export default function Compose({
   value,
   mention,
+  mentionPrefix = '/',
   onChange,
   onClearMention,
   onSend,
@@ -42,7 +43,7 @@ export default function Compose({
       <div className="compose-box-wrap">
         <div className="compose-box">
           {mention && (
-            <span className="mention compose-mention">/{mention}</span>
+            <span className="mention compose-mention">{mentionPrefix}{mention}</span>
           )}
           <input
             ref={inputRef}

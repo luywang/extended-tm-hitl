@@ -11,6 +11,35 @@ const deliver = () => {
   return hitlReducer(pending, { type: 'deliver', id: pending.id, now: pending.deliveryAt })
 }
 
+test('public request visibility survives delivery, editing, approval, and reload', () => {
+  const pending = hitlReducer(initialHitlState, {
+    type: 'request', now, visibility: 'public',
+    prompt: 'Draft a Northwind launch update.', draft: 'Kevin owns JIRA-4593.',
+  })
+  assert.equal(pending.visibility, 'public')
+  assert.equal(hasHitlNotification(pending, now), false)
+  let state = hitlReducer(pending, { type: 'deliver', id: pending.id, now: pending.deliveryAt })
+  assert.equal(state.visibility, 'public')
+  assert.equal(state.unread, true)
+  assert.deepEqual(restoreHitlState(JSON.stringify(state), pending.deliveryAt), state)
+  state = hitlReducer(state, { type: 'edit', now: pending.deliveryAt })
+  state = hitlReducer(state, { type: 'change-draft', text: 'Wait for staging verification.', now: pending.deliveryAt })
+  state = hitlReducer(state, { type: 'save-edit', now: pending.deliveryAt })
+  state = hitlReducer(state, { type: 'share', now: pending.deliveryAt })
+  assert.equal(state.visibility, 'public')
+  assert.equal(state.sharedText, 'Wait for staging verification.')
+  assert.equal(hasHitlNotification(state, pending.deliveryAt), false)
+})
+
+test('unspecified or invalid request visibility stays private', () => {
+  assert.equal(request().visibility, 'private')
+  const state = hitlReducer(initialHitlState, {
+    type: 'request', now, visibility: 'everyone',
+    prompt: 'Draft a Northwind launch update.', draft: 'Kevin owns JIRA-4593.',
+  })
+  assert.equal(state.visibility, 'private')
+})
+
 test('only delivery creates a notification; sharing publishes the approved edit once', () => {
   const pending = request()
   assert.equal(hasHitlNotification(pending, now), false)
@@ -29,24 +58,46 @@ test('only delivery creates a notification; sharing publishes the approved edit 
   assert.equal(hitlReducer(state, { type: 'share', now }), state)
 })
 
-test('reject records one private decision without deleting the draft or publishing', () => {
+for (const visibility of ['private', 'public']) {
+  test(`Don't share deletes ${visibility} review content and notifications once, including across reloads`, () => {
+    const review = { ...deliver(), visibility }
+    const rejectedAt = review.deliveryAt + 1000
+    const editing = hitlReducer(review, { type: 'edit', now: rejectedAt })
+    const state = hitlReducer(editing, { type: 'reject', now: rejectedAt })
+    assert.equal(state.phase, 'rejected')
+    assert.equal(state.visibility, visibility)
+    assert.equal(state.draftText, '')
+    assert.equal(state.editText, null)
+    assert.equal(state.expiresAt, review.expiresAt)
+    assert.equal(state.rejectedAt, rejectedAt)
+    assert.equal(state.rejectionExpiresAt, rejectedAt + 31 * 86400000)
+    assert.equal(state.unread, false)
+    assert.equal(state.sharedText, undefined)
+    assert.equal(hasHitlNotification(state, rejectedAt), false)
+    assert.equal(state.toastDismissed, true)
+    assert.equal(hitlReducer(state, { type: 'share', now: rejectedAt }), state)
+    assert.equal(hitlReducer(state, { type: 'reject', now: rejectedAt + 1 }), state)
+    assert.equal(hitlReducer(state, { type: 'edit', now: rejectedAt }), state)
+    assert.deepEqual(restoreHitlState(JSON.stringify(state), rejectedAt), state)
+  })
+}
+
+test('restoring legacy rejected progress removes retained drafts, edits, and stale notifications', () => {
   const review = deliver()
-  const rejectedAt = review.deliveryAt + 1000
-  const state = hitlReducer(review, { type: 'reject', now: rejectedAt })
-  assert.equal(state.phase, 'rejected')
-  assert.equal(state.draftText, review.draftText)
-  assert.equal(state.expiresAt, review.expiresAt)
-  assert.equal(state.rejectedAt, rejectedAt)
-  assert.equal(state.rejectionExpiresAt, rejectedAt + 31 * 86400000)
-  assert.equal(state.editText, null)
-  assert.equal(state.unread, false)
-  assert.equal(state.sharedText, undefined)
-  assert.equal(hasHitlNotification(state, rejectedAt), true)
-  assert.equal(state.toastDismissed, false)
-  assert.equal(hitlReducer(state, { type: 'share', now: rejectedAt }), state)
-  assert.equal(hitlReducer(state, { type: 'reject', now: rejectedAt + 1 }), state)
-  assert.equal(hitlReducer(state, { type: 'edit', now: rejectedAt }), state)
-  assert.deepEqual(restoreHitlState(JSON.stringify(state), rejectedAt), state)
+  const legacyState = {
+    ...review, phase: 'rejected', rejectedAt: review.deliveryAt + 1000,
+    rejectionExpiresAt: review.deliveryAt + 1000 + 31 * 86400000,
+    editText: 'An unfinished private edit.',
+  }
+  const restored = restoreHitlState(JSON.stringify(legacyState), legacyState.rejectedAt)
+  assert.equal(restored.phase, 'rejected')
+  assert.equal(restored.draftText, '')
+  assert.equal(restored.editText, null)
+  assert.equal(restored.unread, false)
+  assert.equal(restored.toastDismissed, true)
+  assert.equal(restored.rejectedAt, legacyState.rejectedAt)
+  assert.equal(hasHitlNotification(restored, legacyState.rejectedAt), false)
+  assert.deepEqual(hitlReducer(review, { type: 'restore', state: restored }), restored)
 })
 
 test('rejection cannot record a decision for an expired review', () => {
@@ -56,7 +107,7 @@ test('rejection cannot record a decision for an expired review', () => {
   assert.equal(state.rejectedAt, undefined)
 })
 
-test('the original draft expires independently of the later rejection message', () => {
+test('the private confirmation outlives the original review without restoring its deleted content', () => {
   const review = deliver()
   const rejected = hitlReducer(review, { type: 'reject', now: review.expiresAt - 1000 })
   const restored = restoreHitlState(JSON.stringify(rejected), review.expiresAt)

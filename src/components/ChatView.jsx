@@ -117,6 +117,7 @@ export default function ChatView({
   const [extraMessages, setExtraMessages] = useState({})
   const [inputValue, setInputValue] = useState(parsedDraft.text)
   const [composeMention, setComposeMention] = useState(parsedDraft.mention)
+  const [copilotVisibility, setCopilotVisibility] = useState('private')
   const [showSessions, setShowSessions] = useState(hasSessions)
   const [showAgents, setShowAgents] = useState(false)
   const [selectedRailAgent, setSelectedRailAgent] = useState(null)
@@ -133,6 +134,14 @@ export default function ChatView({
   const [highlightMessageId, setHighlightMessageId] = useState(null)
   const messagesEndRef = useRef(null)
   const composeRef = useRef(null)
+  const [hitlRequestCursor, setHitlRequestCursor] = useState(null)
+  if (hitlRequestCursor !== hitl.id) {
+    setHitlRequestCursor(hitl.id)
+    if (isHitlChat) {
+      setChannelThreadPostId(hitl.visibility === 'public' ? `${hitl.id}-request` : null)
+      setThreadRailOpen(hitl.visibility === 'public')
+    }
+  }
 
   // Reset per-chat ephemeral state when activeChatId changes. Using the
   // render-phase state-adjustment pattern (rather than useEffect) avoids the
@@ -144,6 +153,7 @@ export default function ChatView({
     setChatIdCursor(activeChatId)
     setInputValue(parsedDraft.text)
     setComposeMention(parsedDraft.mention)
+    setCopilotVisibility('private')
     setShowAgents(false)
     setSelectedRailAgent(null)
     setRailJiraStep(0)
@@ -240,7 +250,7 @@ export default function ChatView({
   ]
   // Messages with `replies` arrays power the threads list/detail view in
   // group chats. Channels use channelPosts for the same purpose.
-  const groupThreadablePosts = isGroup ? messages.filter((m) => m.replies?.length > 0) : []
+  const groupThreadablePosts = isGroup ? messages.filter((m) => m.isHitlThread || m.replies?.length > 0) : []
 
   const activeSession = hasSessions && sessions[activeChatId]?.find((s) => s.id === activeSessionId)
   const sourceChat = activeSession?.sourceChatId ? contacts.find((c) => c.id === activeSession.sourceChatId) : null
@@ -476,7 +486,7 @@ export default function ChatView({
     if (isHitlChat && /^[/@]Copilot\b/i.test(sentText)) {
       const prompt = sentText.replace(/^[/@]Copilot\b\s*/i, '').trim()
       if (hitl.phase !== 'idle' || !prompt) return
-      onRequestReview(prompt)
+      onRequestReview(prompt, copilotVisibility)
       setInputValue('')
       setComposeMention(null)
       return
@@ -582,12 +592,19 @@ export default function ChatView({
         {isHitlChat && (
           <HitlDemoBar
             phase={hitl.phase}
-            onDraft={() => {
+            onDraft={(visibility) => {
+              const prompt = inputValue.replace(/^[/@]Copilot\b\s*/i, '').trim() || hitlScenario.prompt
+              setCopilotVisibility(visibility)
+              setInputValue(prompt)
               setComposeMention('Copilot')
-              setInputValue(hitlScenario.prompt)
               composeRef.current?.focus()
             }}
-            onReset={onResetDemo}
+            onReset={() => {
+              setCopilotVisibility('private')
+              setInputValue('')
+              setComposeMention(null)
+              onResetDemo()
+            }}
             onShowActivity={onShowActivity}
             onShowMentions={onShowMentions}
           />
@@ -667,7 +684,7 @@ export default function ChatView({
         </div>
 
         <div className="chat-compose-area">
-          {isHitlChat && hitl.phase === 'drafting' && (
+          {isHitlChat && hitl.phase === 'drafting' && hitl.visibility !== 'public' && (
             <TypingIndicator contact={copilotAgent} className="chat-compose-typing" />
           )}
           {mainTypingAgentId === activeChatId && (
@@ -676,14 +693,15 @@ export default function ChatView({
               className="chat-compose-typing"
             />
           )}
-          {isHitlChat && composeMention?.toLowerCase() === 'copilot' && (
+          {isHitlChat && composeMention?.toLowerCase() === 'copilot' && copilotVisibility !== 'public' && (
             <div className="hitl-compose-disclaimer">
-              <PrivateDisclaimer text="Send privately to Copilot. The group won't see your request." />
+              <PrivateDisclaimer text="Private request to Copilot. Click Send when ready; the group won't see your request." />
             </div>
           )}
           <Compose
             value={inputValue}
             mention={composeMention}
+            mentionPrefix={isHitlChat && composeMention?.toLowerCase() === 'copilot' && copilotVisibility === 'public' ? '@' : '/'}
             onChange={setInputValue}
             onClearMention={() => setComposeMention(null)}
             onSend={handleSend}
@@ -691,6 +709,7 @@ export default function ChatView({
             inputRef={composeRef}
             onInvokeCopilot={isHitlChat ? () => {
               if (hitl.phase !== 'idle') return
+              setCopilotVisibility('private')
               setComposeMention('Copilot')
               if (!inputValue.trim()) setInputValue(hitlScenario.prompt)
               composeRef.current?.focus()
@@ -727,6 +746,9 @@ export default function ChatView({
           posts={isChannel ? channelPosts : groupThreadablePosts}
           initialPostId={channelThreadPostId}
           activeContact={activeContact}
+          onCardAction={onReviewAction}
+          onCardInputChange={onDraftChange}
+          typingContact={isHitlChat && hitl.visibility === 'public' && hitl.phase === 'drafting' ? copilotAgent : null}
           onClose={() => {
             setThreadRailOpen(false)
             setChannelThreadPostId(null)
