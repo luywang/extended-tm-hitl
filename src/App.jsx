@@ -1,5 +1,5 @@
 import { useState, useCallback, useReducer, useEffect } from 'react'
-import { agentSessions as initialSessions, activityEvents as seedActivityEvents, hitlScenario, currentUser } from './data'
+import { agentSessions as initialSessions, activityEvents as seedActivityEvents, hitlScenario, currentUser, deviceRoamingScenario } from './data'
 import { HITL_STORAGE_KEY, hitlReducer, restoreHitlState, hasHitlNotification } from './hitlState'
 import {
   MESSAGE_DELETIONS_STORAGE_KEY, canDeleteMessage, messageKey,
@@ -11,13 +11,34 @@ import ChatList from './components/ChatList'
 import ChatView from './components/ChatView'
 import ActivityList from './components/ActivityList'
 import TitleBar from './components/TitleBar'
+import MobileTeams from './components/MobileTeams'
 import { FreModal } from './components/common'
 import { DesktopToast } from './components/HitlDemo'
 import './App.css'
 
+const DEVICE_CONTENT_KEY = 'teams-same-account-preview-v1'
+
+function loadDeviceContent(value) {
+  try {
+    const content = JSON.parse(value === undefined ? localStorage.getItem(DEVICE_CONTENT_KEY) : value)
+    if (content && typeof content.messages === 'object' && content.messages !== null &&
+        Array.isArray(content.readChatIds) && Array.isArray(content.readActivityIds)) {
+      return { ...content, timeOffset: Number.isFinite(content.timeOffset) ? content.timeOffset : 0 }
+    }
+  } catch { /* The preview also works without browser storage. */ }
+  return { messages: {}, readChatIds: [hitlScenario.chatId], readActivityIds: [], timeOffset: 0 }
+}
+
+function persistContent(key, content) {
+  try {
+    const value = JSON.stringify(content)
+    if (localStorage.getItem(key) !== value) localStorage.setItem(key, value)
+  } catch { /* Keep in-memory state authoritative when storage is unavailable. */ }
+}
+
 function loadHitlState() {
   try {
-    return restoreHitlState(localStorage.getItem(HITL_STORAGE_KEY), Date.now())
+    return restoreHitlState(localStorage.getItem(HITL_STORAGE_KEY), Date.now() + loadDeviceContent().timeOffset)
   } catch {
     return restoreHitlState(null, Date.now())
   }
@@ -37,26 +58,37 @@ function loadDeletedMessageKeys() {
   }
 }
 
-function messageLifetime(expiresAt) {
+function messageLifetime(expiresAt, now) {
+  const expiresSoon = expiresAt > now && expiresAt - now <= 24 * 60 * 60 * 1000
   const date = new Date(expiresAt).toLocaleDateString('en-US', {
     month: 'short', day: 'numeric', year: 'numeric', timeZone: 'America/Los_Angeles',
   })
-  return `Expires on ${date}`
+  return {
+    lifetimeLabel: expiresSoon ? 'Expire tomorrow' : `Expires on ${date}`,
+    lifetimeWarning: expiresSoon,
+  }
 }
 
 export default function App() {
+  const [devicePreview, setDevicePreview] = useState(false)
+  const [timeOffset, setTimeOffset] = useState(() => loadDeviceContent().timeOffset)
+  const previewNow = useCallback(() => Date.now() + timeOffset, [timeOffset])
+  const [sharedMessages, setSharedMessages] = useState(() => loadDeviceContent().messages)
   const [activeView, setActiveView] = useState('chat') // 'chat' | 'activity'
   const [activeChatId, setActiveChatId] = useState(hitlScenario.chatId)
-  const [readChatIds, setReadChatIds] = useState(() => new Set([hitlScenario.chatId]))
+  const [readChatIds, setReadChatIds] = useState(() => new Set(loadDeviceContent().readChatIds))
   const [activeSlice, setActiveSlice] = useState(null)
   const [hitl, dispatchHitl] = useReducer(hitlReducer, null, loadHitlState)
   const [deletedMessageKeys, setDeletedMessageKeys] = useState(loadDeletedMessageKeys)
-  const [clock, setClock] = useState(() => Date.now())
+  const [clock, setClock] = useState(() => Date.now() + loadDeviceContent().timeOffset)
   const [unavailableNotice, setUnavailableNotice] = useState(false)
   const [sessions, setSessions] = useState(initialSessions)
   const [dynamicSessionMessages, setDynamicSessionMessages] = useState({})
   // Activity feed: persist which events the user has opened so unread decorations clear.
-  const [activityEvents, setActivityEvents] = useState(seedActivityEvents)
+  const [activityEvents, setActivityEvents] = useState(() => {
+    const readIds = loadDeviceContent().readActivityIds
+    return seedActivityEvents.map(event => readIds.includes(event.id) ? { ...event, unread: false } : event)
+  })
   const [activeActivityId, setActiveActivityId] = useState(null)
   // When navigating to a chat, optionally tell ChatView to open a specific
   // session (sessions rail), open a specific channel thread, or flash a
@@ -70,42 +102,53 @@ export default function App() {
   const dismissFre = useCallback(() => setShowFre(false), [])
 
   useEffect(() => {
-    try {
-      localStorage.setItem(HITL_STORAGE_KEY, JSON.stringify(hitl))
-    } catch {
-      // The demo still works in memory when browser storage is unavailable.
-    }
+    persistContent(HITL_STORAGE_KEY, hitl)
   }, [hitl])
 
   useEffect(() => {
-    try {
-      localStorage.setItem(MESSAGE_DELETIONS_STORAGE_KEY, JSON.stringify(deletedMessageKeys))
-    } catch {
-      // Deletion still works in memory when browser storage is unavailable.
-    }
+    persistContent(MESSAGE_DELETIONS_STORAGE_KEY, deletedMessageKeys)
   }, [deletedMessageKeys])
+
+  useEffect(() => {
+    persistContent(DEVICE_CONTENT_KEY, {
+      messages: sharedMessages,
+      readChatIds: [...readChatIds],
+      readActivityIds: activityEvents.filter(event => !event.unread).map(event => event.id),
+      timeOffset,
+    })
+  }, [sharedMessages, readChatIds, activityEvents, timeOffset])
 
   useEffect(() => {
     if (hitl.phase !== 'drafting') return
     const timer = setTimeout(() => {
-      dispatchHitl({ type: 'deliver', id: hitl.id, now: Date.now() })
-    }, Math.max(0, hitl.deliveryAt - Date.now()))
+      dispatchHitl({ type: 'deliver', id: hitl.id, now: previewNow() })
+    }, Math.max(0, hitl.deliveryAt - previewNow()))
     return () => clearTimeout(timer)
-  }, [hitl.phase, hitl.id, hitl.deliveryAt])
+  }, [hitl.phase, hitl.id, hitl.deliveryAt, previewNow])
 
   useEffect(() => {
     const refresh = () => {
-      const now = Date.now()
+      const now = previewNow()
       setClock(now)
       dispatchHitl({ type: 'expire', now })
     }
     const onStorage = (event) => {
+      if (event.key === DEVICE_CONTENT_KEY) {
+        const content = loadDeviceContent(event.newValue)
+        setSharedMessages(content.messages)
+        setTimeOffset(content.timeOffset)
+        setClock(Date.now() + content.timeOffset)
+        dispatchHitl({ type: 'expire', now: Date.now() + content.timeOffset })
+        setReadChatIds(new Set(content.readChatIds))
+        setActivityEvents(seedActivityEvents.map(item => content.readActivityIds.includes(item.id) ? { ...item, unread: false } : item))
+        return
+      }
       if (event.key === MESSAGE_DELETIONS_STORAGE_KEY) {
         setDeletedMessageKeys(restoreDeletedMessageKeys(event.newValue))
         return
       }
       if (event.key !== HITL_STORAGE_KEY) return
-      const now = Date.now()
+      const now = previewNow()
       setClock(now)
       dispatchHitl({ type: 'restore', state: restoreHitlState(event.newValue, now) })
     }
@@ -117,7 +160,7 @@ export default function App() {
       window.removeEventListener('focus', refresh)
       window.removeEventListener('storage', onStorage)
     }
-  }, [])
+  }, [previewNow])
 
   const selectChat = useCallback((chatId) => {
     setActiveChatId(chatId)
@@ -156,22 +199,30 @@ export default function App() {
     setDynamicSessionMessages(prev => ({ ...prev, [sessionId]: messages }))
   }, [])
 
-  const selectActivity = useCallback((event) => {
-    setActiveSlice(null)
-    setUnavailableNotice(false)
-    if (event.isTargeted) dispatchHitl({ type: 'read', now: Date.now() })
-    setActiveActivityId(event.id)
+  const readReview = useCallback(() => dispatchHitl({ type: 'read', now: previewNow() }), [previewNow])
+  const readChat = useCallback(chatId => {
+    setReadChatIds(previous => previous.has(chatId) ? previous : new Set(previous).add(chatId))
+  }, [])
+  const readEvent = useCallback(event => {
+    if (event.isTargeted) dispatchHitl({ type: 'read', now: previewNow() })
     setActivityEvents(prev =>
       prev.map(e => (e.id === event.id && e.unread ? { ...e, unread: false } : e))
     )
-    setActiveChatId(event.chatId)
     setReadChatIds(prev => (prev.has(event.chatId) ? prev : new Set(prev).add(event.chatId)))
+  }, [previewNow])
+
+  const selectActivity = useCallback((event) => {
+    setActiveSlice(null)
+    setUnavailableNotice(false)
+    readEvent(event)
+    setActiveActivityId(event.id)
+    setActiveChatId(event.chatId)
     setNavIntent({
       chatId: event.chatId,
       channelThreadPostId: event.postId || null,
       highlightMessageId: event.messageId || null,
     })
-  }, [])
+  }, [readEvent])
 
   const reviewDeleted = isMessageDeleted(deletedMessageKeys, hitlScenario.chatId, hitl.id)
   const targetedEvent = hasHitlNotification(hitl, clock) && !reviewDeleted ? {
@@ -202,7 +253,7 @@ export default function App() {
       isPrivate: hitl.visibility !== 'public',
       isExtendedTm: hitl.visibility !== 'public',
       privateLabel: 'Only you and Copilot can see this message',
-      lifetimeLabel: hitl.visibility === 'public' ? undefined : messageLifetime(hitl.expiresAt),
+      ...(hitl.visibility === 'public' ? {} : messageLifetime(hitl.expiresAt, clock)),
       canUndo: !!hitl.prompt.trim(),
       reactions: hitl.visibility === 'public' ? [{ emoji: '👀', count: 1, label: 'Copilot reacted with Eyes: looking at this message' }] : undefined,
     })
@@ -217,7 +268,7 @@ export default function App() {
       isPrivate: true,
       isExtendedTm: true,
       privateLabel: 'Only you can see this message',
-      lifetimeLabel: messageLifetime(hitl.expiresAt),
+      ...messageLifetime(hitl.expiresAt, clock),
       cards: [{
         title: 'Launch readiness update',
         subtitle: 'Review for Northwind launch',
@@ -247,7 +298,7 @@ export default function App() {
       isPrivate: hitl.visibility !== 'public',
       isExtendedTm: hitl.visibility !== 'public',
       privateLabel: 'Only you can see this message',
-      lifetimeLabel: hitl.visibility === 'public' ? undefined : messageLifetime(hitl.rejectionExpiresAt),
+      ...(hitl.visibility === 'public' ? {} : messageLifetime(hitl.rejectionExpiresAt, clock)),
     })
   }
   if (hitl.phase === 'shared') {
@@ -272,7 +323,23 @@ export default function App() {
     : hitlMessages
 
   const handleReviewAction = (action) => {
-    dispatchHitl({ type: action, now: Date.now() })
+    dispatchHitl({ type: action, now: previewNow() })
+  }
+
+  const requestReview = (prompt, visibility) => {
+    const now = previewNow()
+    dispatchHitl({ type: 'request', prompt, visibility, draft: hitlScenario.draft, now })
+    return `extended-tm-${now}`
+  }
+
+  const sendSharedMessage = (chatId, text, postId = null) => {
+    if (!text.trim()) return
+    const bucket = postId ? `thread:${chatId}:${postId}` : chatId
+    const message = {
+      id: `device-message-${crypto.randomUUID()}`, senderId: 'me', text: text.trim(),
+      time: messageTime(previewNow()),
+    }
+    setSharedMessages(previous => ({ ...previous, [bucket]: [...(previous[bucket] || []), message] }))
   }
 
   const deleteMessage = (chatId, message, contextId = null) => {
@@ -280,12 +347,14 @@ export default function App() {
     const key = messageKey(chatId, message.id, contextId)
     setDeletedMessageKeys(previous => previous.includes(key) ? previous : [...previous, key])
     if (chatId === hitlScenario.chatId && contextId === null) {
-      dispatchHitl({ type: 'delete-message', messageId: message.id, now: Date.now() })
+      dispatchHitl({ type: 'delete-message', messageId: message.id, now: previewNow() })
     }
     setUnavailableNotice(false)
   }
 
   const resetDemo = () => {
+    setTimeOffset(0)
+    setClock(Date.now())
     dispatchHitl({ type: 'reset' })
     setUnavailableNotice(false)
     setActiveActivityId(null)
@@ -299,8 +368,8 @@ export default function App() {
     setActiveView('chat')
     selectChat(hitlScenario.chatId)
     dispatchHitl({ type: 'dismiss-toast' })
-    dispatchHitl({ type: 'read', now: Date.now() })
-    if (hitl.phase === 'review' && Date.now() < hitl.expiresAt) {
+    dispatchHitl({ type: 'read', now: previewNow() })
+    if (hitl.phase === 'review' && previewNow() < hitl.expiresAt) {
       setNavIntent({
         chatId: hitlScenario.chatId,
         highlightMessageId: hitl.id,
@@ -311,9 +380,30 @@ export default function App() {
     }
   }
 
+  const advanceClock = timestamp => {
+    const now = Math.max(previewNow(), timestamp)
+    setTimeOffset(now - Date.now())
+    setClock(now)
+    dispatchHitl({ type: 'expire', now })
+  }
+
   return (
-    <div className="app">
-      <TitleBar onShowFre={() => setShowFre(true)} />
+    <div className={`app${devicePreview ? ' device-roaming' : ''}`}>
+      {devicePreview && (
+        <header className="device-preview-header">
+          <div><strong>{deviceRoamingScenario.title}</strong><span>{deviceRoamingScenario.description}</span></div>
+          <div className="device-preview-controls">
+            {timeOffset > 0 && <span>Demo time: {new Date(clock).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'America/Los_Angeles' })}</span>}
+            <button type="button" disabled={hitl.phase === 'idle' || hitl.phase === 'drafting'} onClick={() => advanceClock(hitl.notificationExpiresAt)}>Advance to day 30</button>
+            <button type="button" disabled={hitl.phase === 'idle' || hitl.phase === 'drafting'} onClick={() => advanceClock(Math.max(hitl.expiresAt, hitl.rejectionExpiresAt || 0) + 1)}>Advance to TM expiry</button>
+            <button type="button" onClick={() => setDevicePreview(false)}>Exit device preview</button>
+          </div>
+        </header>
+      )}
+      <div className="device-clients">
+      <section className="desktop-client" aria-label="Teams web client">
+      {devicePreview && <div className="device-client-label">Teams web · {currentUser.name}</div>}
+      <TitleBar onShowFre={() => setShowFre(true)} onShowDevices={() => { setShowFre(false); setDevicePreview(true) }} showDeviceEntry={!devicePreview} />
       <div className="app-body">
         <NavRail
           activeView={activeView}
@@ -353,9 +443,13 @@ export default function App() {
             deletedMessageKeys={deletedMessageKeys}
             onDeleteMessage={deleteMessage}
             onUndoDeleteMessage={undoDeleteMessage}
-            onRequestReview={(prompt, visibility) => dispatchHitl({ type: 'request', prompt, visibility, draft: hitlScenario.draft, now: Date.now() })}
+            onRequestReview={requestReview}
+            independentNavigation={devicePreview}
+            sharedMessages={devicePreview ? sharedMessages : undefined}
+            onSendSharedMessage={devicePreview ? sendSharedMessage : undefined}
+            onReadReview={devicePreview ? readReview : undefined}
             onReviewAction={handleReviewAction}
-            onDraftChange={(text) => dispatchHitl({ type: 'change-draft', text, now: Date.now() })}
+            onDraftChange={(text) => dispatchHitl({ type: 'change-draft', text, now: previewNow() })}
             onResetDemo={resetDemo}
             onShowActivity={() => { setActiveView('activity'); setActiveSlice(null) }}
             onShowMentions={showMentions}
@@ -374,6 +468,33 @@ export default function App() {
       {hitl.phase !== 'idle' && hitl.phase !== 'drafting' && !hitl.toastDismissed && !reviewDeleted && (
         <DesktopToast onOpen={openToast} onDismiss={() => dispatchHitl({ type: 'dismiss-toast' })} />
       )}
+      </section>
+      {devicePreview && (
+        <div className="mobile-client">
+          <div className="device-client-label">iOS Teams · {currentUser.name}</div>
+          <MobileTeams
+            hitl={hitl}
+            now={clock}
+            hitlMessages={hitlCanvasMessages}
+            events={allActivityEvents}
+            readChatIds={readChatIds}
+            deletedMessageKeys={deletedMessageKeys}
+            sharedMessages={sharedMessages}
+            onReadChat={readChat}
+            onReadEvent={readEvent}
+            onReadReview={readReview}
+            onRequestReview={requestReview}
+            onReviewAction={handleReviewAction}
+            onDraftChange={text => dispatchHitl({ type: 'change-draft', text, now: previewNow() })}
+            onDeleteMessage={deleteMessage}
+            onUndoDeleteMessage={undoDeleteMessage}
+            onResetDemo={resetDemo}
+            onSendMessage={sendSharedMessage}
+            onDismissToast={() => dispatchHitl({ type: 'dismiss-toast' })}
+          />
+        </div>
+      )}
+      </div>
       {showFre && (
         <FreModal
           title="Review privately. Share confidently."

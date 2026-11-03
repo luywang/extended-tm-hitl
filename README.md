@@ -14,6 +14,28 @@ A high-fidelity static shell of the Microsoft Teams Chat UI, meant as a starting
 
 Nothing is wired to a backend. The shell is static on purpose — prototypes stay small, fast, and easy to hand off.
 
+## Same-account device preview
+
+Click **Device roaming demo** in the Teams title bar to show desktop Teams web
+beside an iOS Teams phone surface, both signed in as fictional Alex Morgan.
+The phone starts at its chat list; open Northwind launch or use Activity/Mentions
+to review the same Copilot draft. Either client can send a private or public
+request, edit the review, share, choose Don't share, delete, or read notifications.
+Public responses stay in the request thread. Tap the private-message clock to
+see its actual expiration date (delivery plus 31 days, including the buffer).
+Use the preview header's **Advance to day 30** and **Advance to TM expiry**
+controls to exercise notification expiry and the private-message buffer without
+waiting. These advance one simulated clock on both clients, not the expiration
+dates themselves. **Restart demo** resets the clock to real time.
+
+Navigation, scrolling, and compose text are independent; review edits, decisions,
+deletions, and read state synchronize immediately through one in-memory authority.
+Progress is saved in browser localStorage, with existing storage-event tab sync.
+This is a same-account simulation, **not real device transport or OS notifications**.
+On narrower windows, scroll the preview workspace horizontally; the web client
+is intentionally not squeezed into a phone layout. **Exit device preview** returns
+to the normal desktop experience without resetting the review.
+
 ## Quick start
 
 Requires Node 20.19+ (Vite 8 requirement).

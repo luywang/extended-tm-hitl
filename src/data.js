@@ -9,3 +9,4 @@ export { copilotAgent, designerAgent, pollyAgent, breakthuAgent } from './data/a
 export { promptSuggestions } from './data/promptSuggestions'
 export { activityEvents } from './data/activityEvents'
 export { hitlScenario } from './data/hitl'
+export { deviceRoamingScenario } from './data/deviceRoaming'

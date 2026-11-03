@@ -138,3 +138,11 @@ export function Lock({ size = 12 }) {
     </svg>
   )
 }
+
+export function Activity({ size = 24 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M5 17h14l-2-3V9a5 5 0 0 0-10 0v5zM10 20h4M12 2v2" />
+    </svg>
+  )
+}

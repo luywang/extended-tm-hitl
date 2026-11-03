@@ -1,8 +1,8 @@
-import { currentUser } from '../data/contacts'
+import { currentUser } from '../data'
 import { Avatar, ChevronLeft, ChevronRight, Info } from './common'
 import './TitleBar.css'
 
-export default function TitleBar({ onShowFre }) {
+export default function TitleBar({ onShowFre, onShowDevices, showDeviceEntry }) {
   return (
     <div className="title-bar">
       <div className="title-bar-left">
@@ -35,6 +35,7 @@ export default function TitleBar({ onShowFre }) {
       </div>
 
       <div className="title-bar-right">
+        {showDeviceEntry && <button type="button" className="title-device-entry" onClick={onShowDevices}>Device roaming demo</button>}
         <button className="title-btn" aria-label="More options">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
             <path d="M4 8a1 1 0 1 1-2 0 1 1 0 0 1 2 0zm5 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0zm4 1a1 1 0 1 0 0-2 1 1 0 0 0 0 2z"/>

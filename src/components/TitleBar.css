@@ -94,3 +94,16 @@
 .title-user-avatar:hover {
   opacity: 0.9;
 }
+
+.title-device-entry {
+  border: 1px solid #E0E0E0;
+  border-radius: 4px;
+  background: #FAFAFA;
+  padding: 5px 10px;
+  color: #5B5FC7;
+  font: inherit;
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}

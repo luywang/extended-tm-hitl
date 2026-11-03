@@ -32,7 +32,9 @@ import './ChatView.css'
 // badge opens ChannelThreadRail.
 function postToMessage(post) {
   const replyCount = post.replies?.length || 0
-  if (!replyCount) return { ...post }
+  if (!replyCount) return post.isHitlThread
+    ? { ...post, threadReply: { participantIds: ['copilot'], count: 0 } }
+    : { ...post }
   const seen = new Set()
   const participantIds = []
   for (const r of post.replies) {
@@ -100,6 +102,10 @@ export default function ChatView({
   onShowActivity,
   onShowMentions,
   unavailableNotice,
+  independentNavigation = false,
+  sharedMessages,
+  onSendSharedMessage,
+  onReadReview,
 }) {
   const activeContact = contacts.find((c) => c.id === activeChatId)
   const baseMessages = messagesByContact[activeChatId] || []
@@ -115,8 +121,14 @@ export default function ChatView({
   const isAgent = activeContact.isAgent && !activeContact.isGroup
   const isChannel = !!activeContact.isChannel
   const isGroup = !!activeContact.isGroup
+  const addSharedReplies = message => {
+    const replies = sharedMessages?.[`thread:${activeChatId}:${message.id}`] || []
+    return replies.length ? { ...message, replies: [...(message.replies || []), ...replies] } : message
+  }
   const channelPosts = isChannel
-    ? applyMessageDeletions(channelPostsByContact[activeChatId] || [], deletedMessageKeys, activeChatId)
+    ? applyMessageDeletions([
+        ...(channelPostsByContact[activeChatId] || []), ...(sharedMessages?.[activeChatId] || []),
+      ].map(addSharedReplies), deletedMessageKeys, activeChatId)
     : null
   const hasSessions = isAgent && sessions[activeChatId]
 
@@ -140,10 +152,12 @@ export default function ChatView({
   const [highlightMessageId, setHighlightMessageId] = useState(null)
   const messagesEndRef = useRef(null)
   const composeRef = useRef(null)
+  const chatViewRef = useRef(null)
+  const lastScrolledChat = useRef(null)
   const [hitlRequestCursor, setHitlRequestCursor] = useState(null)
   if (hitlRequestCursor !== hitl.id) {
     setHitlRequestCursor(hitl.id)
-    if (isHitlChat) {
+    if (isHitlChat && !independentNavigation) {
       setChannelThreadPostId(hitl.visibility === 'public' ? `${hitl.id}-request` : null)
       setThreadRailOpen(hitl.visibility === 'public')
     }
@@ -209,7 +223,7 @@ export default function ChatView({
     if (highlightMessageId) {
       // Activity-navigation: scroll the triggering message into view and
       // flash it briefly so the user sees where the notification landed.
-      const el = document.querySelector(
+      const el = chatViewRef.current?.querySelector(
         `[data-message-id="${CSS.escape(String(highlightMessageId))}"]`
       )
       if (el) {
@@ -223,8 +237,24 @@ export default function ChatView({
       }
       return
     }
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [extraMessages, activeChatId, activeSessionId, mainTypingAgentId, highlightMessageId, hitl.phase])
+    if (independentNavigation) {
+      if (lastScrolledChat.current === activeChatId) return
+      lastScrolledChat.current = activeChatId
+      const body = messagesEndRef.current?.closest('.chat-messages')
+      if (body) body.scrollTop = body.scrollHeight
+    } else messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [extraMessages, activeChatId, activeSessionId, mainTypingAgentId, highlightMessageId, hitl.phase, independentNavigation])
+
+  useEffect(() => {
+    if (!onReadReview || !isHitlChat || !hitl.unread) return
+    const review = chatViewRef.current?.querySelector(`[data-message-id="${CSS.escape(hitl.id)}"]`)
+    if (!review) return
+    const observer = new IntersectionObserver(entries => {
+      if (entries.some(entry => entry.isIntersecting)) onReadReview()
+    }, { root: chatViewRef.current })
+    observer.observe(review)
+    return () => observer.disconnect()
+  }, [onReadReview, isHitlChat, hitl.id, hitl.phase, hitl.unread, channelThreadPostId, threadRailOpen])
 
   // Mirror the rail's Jira thread messages back into the source chat's
   // session so the conversation is discoverable from Jira's sessions list.
@@ -252,8 +282,9 @@ export default function ChatView({
   const messages = applyMessageDeletions([
     ...displayBaseMessages,
     ...(extraMessages[canvasKey] || []),
+    ...(!activeSessionId ? sharedMessages?.[activeChatId] || [] : []),
     ...(isHitlChat ? hitlMessages : []),
-  ], deletedMessageKeys, activeChatId, activeSessionId)
+  ].map(addSharedReplies), deletedMessageKeys, activeChatId, activeSessionId)
   const deleteMessage = message => onDeleteMessage(activeChatId, message, activeSessionId)
   const undoDeleteMessage = message => onUndoDeleteMessage(activeChatId, message, activeSessionId)
   // Messages with `replies` arrays power the threads list/detail view in
@@ -494,13 +525,22 @@ export default function ChatView({
     if (isHitlChat && /^[/@]Copilot\b/i.test(sentText)) {
       const prompt = sentText.replace(/^[/@]Copilot\b\s*/i, '').trim()
       if (hitl.phase !== 'idle' || !prompt) return
-      onRequestReview(prompt, copilotVisibility)
+      const id = onRequestReview(prompt, copilotVisibility)
+      if (independentNavigation) {
+        setChannelThreadPostId(copilotVisibility === 'public' ? `${id}-request` : null)
+        setThreadRailOpen(copilotVisibility === 'public')
+      }
       setInputValue('')
       setComposeMention(null)
       return
     }
     setInputValue('')
     setComposeMention(null)
+
+    if (onSendSharedMessage && !activeSessionId) {
+      onSendSharedMessage(chatId, sentText)
+      return
+    }
 
     const isJiraInvocation = JIRA_FLOW_ENABLED && chatId === 11 && sentText.toLowerCase().includes('jira')
     if (isJiraInvocation) {
@@ -576,7 +616,7 @@ export default function ChatView({
   const showPromptSuggestions = !!agentSuggestions && messages.length === 0 && mainTypingAgentId !== activeChatId
 
   return (
-    <div className="chat-view">
+    <div className="chat-view" ref={chatViewRef}>
       <div className="chat-view-main">
         <ChatHeader
           activeContact={activeContact}
@@ -668,7 +708,7 @@ export default function ChatView({
                 </div>
               )}
               {messages.map((msg) => {
-                const isThreaded = isGroup && msg.replies?.length > 0
+                const isThreaded = isGroup && (msg.isHitlThread || msg.replies?.length > 0)
                 return (
                   <MessageRow
                     key={msg.id}
@@ -678,6 +718,7 @@ export default function ChatView({
                     onUndoDeleteMessage={undoDeleteMessage}
                     onCardAction={msg.id === hitl.id ? onReviewAction : undefined}
                     onCardInputChange={msg.id === hitl.id ? onDraftChange : undefined}
+                    autoFocusCardInput={!independentNavigation}
                     onOpenThread={isThreaded ? () => {
                       if (threadRailOpen && channelThreadPostId === msg.id) {
                         setThreadRailOpen(false)
@@ -772,6 +813,9 @@ export default function ChatView({
           onDeleteMessage={deleteMessage}
           onUndoDeleteMessage={undoDeleteMessage}
           deletedMessageKeys={deletedMessageKeys}
+          onSendSharedMessage={onSendSharedMessage}
+          autoFocusCardInput={!independentNavigation}
+          independentNavigation={independentNavigation}
           onClose={() => {
             setThreadRailOpen(false)
             setChannelThreadPostId(null)

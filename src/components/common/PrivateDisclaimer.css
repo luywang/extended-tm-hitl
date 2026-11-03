@@ -7,12 +7,36 @@
 }
 
 .private-disclaimer-expiry {
+  position: relative;
   display: inline-flex;
   flex-shrink: 0;
   border-radius: 2px;
 }
 
-.private-disclaimer-expiry:focus-visible {
+.private-disclaimer-expiry button {
+  padding: 0;
+  color: inherit;
+}
+
+.private-disclaimer-expiry .private-disclaimer-expiring {
+  color: #B14E0F;
+}
+
+.private-disclaimer-expiry button:focus-visible {
   outline: 2px solid #5B5FC7;
   outline-offset: 2px;
+}
+
+.private-disclaimer-date {
+  position: absolute;
+  right: 0;
+  top: 20px;
+  z-index: 10;
+  width: max-content;
+  padding: 6px 8px;
+  background: #FFFFFF;
+  border: 1px solid #E0E0E0;
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  white-space: nowrap;
 }

@@ -13,7 +13,7 @@ import './ChannelThreadRail.css'
 // entirely. `initialPostId` opens the rail in detail mode for that post; if
 // it changes from the outside (e.g. an Activity event re-targets the rail),
 // the rail re-syncs to the new thread.
-export default function ChannelThreadRail({ posts, initialPostId, activeContact, onClose, onCardAction, onCardInputChange, typingContact, onDeleteMessage, onUndoDeleteMessage, deletedMessageKeys }) {
+export default function ChannelThreadRail({ posts, initialPostId, activeContact, onClose, onCardAction, onCardInputChange, typingContact, onDeleteMessage, onUndoDeleteMessage, deletedMessageKeys, onSendSharedMessage, autoFocusCardInput = true, independentNavigation = false }) {
   const [initialPostIdCursor, setInitialPostIdCursor] = useState(initialPostId)
   const [viewPostId, setViewPostId] = useState(initialPostId)
   if (initialPostIdCursor !== initialPostId) {
@@ -24,6 +24,7 @@ export default function ChannelThreadRail({ posts, initialPostId, activeContact,
   const [extraRepliesByPost, setExtraRepliesByPost] = useState({})
   const [input, setInput] = useState('')
   const endRef = useRef(null)
+  const lastScrolledPost = useRef(null)
 
   const post = viewPostId ? posts.find((p) => p.id === viewPostId) : null
   const extraReplies = post
@@ -34,8 +35,14 @@ export default function ChannelThreadRail({ posts, initialPostId, activeContact,
   const extraReplyCount = extraReplies.length
 
   useEffect(() => {
-    if (viewPostId) endRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [extraReplyCount, viewPostId, replyCount])
+    if (!viewPostId) return
+    if (independentNavigation) {
+      if (lastScrolledPost.current === viewPostId) return
+      lastScrolledPost.current = viewPostId
+      const body = endRef.current?.closest('.channel-thread-rail-body')
+      if (body) body.scrollTop = body.scrollHeight
+    } else endRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [extraReplyCount, viewPostId, replyCount, independentNavigation])
 
   const flattenSubject = (p) => {
     if (p.subject) return p.subject
@@ -49,6 +56,11 @@ export default function ChannelThreadRail({ posts, initialPostId, activeContact,
   const send = () => {
     const text = input.trim()
     if (!text || !post) return
+    if (onSendSharedMessage) {
+      onSendSharedMessage(activeContact.id, text, post.id)
+      setInput('')
+      return
+    }
     const now = new Date()
     const time = now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
     setExtraRepliesByPost((prev) => ({
@@ -119,6 +131,7 @@ export default function ChannelThreadRail({ posts, initialPostId, activeContact,
                   onUndoDeleteMessage={onUndoDeleteMessage}
                   onCardAction={reply.isExtendedTm ? onCardAction : undefined}
                   onCardInputChange={reply.isExtendedTm ? onCardInputChange : undefined}
+                  autoFocusCardInput={autoFocusCardInput}
                 />
               ))}
               {post.isHitlThread && typingContact && <TypingIndicator contact={typingContact} />}

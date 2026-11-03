@@ -170,7 +170,7 @@ function ThreadReplyBadge({ reply, onClick }) {
   )
 }
 
-export default function MessageRow({ message, activeContact, onOpenThread, onCardAction, onCardInputChange, onDeleteMessage, onUndoDeleteMessage }) {
+export default function MessageRow({ message, activeContact, onOpenThread, onCardAction, onCardInputChange, onDeleteMessage, onUndoDeleteMessage, autoFocusCardInput = true }) {
   const isMe = message.senderId === 'me'
   const isMultiParty = activeContact.isGroup || activeContact.isChannel
   const sender = isMe
@@ -215,7 +215,7 @@ export default function MessageRow({ message, activeContact, onOpenThread, onCar
               restricted={message.isExtendedTm}
             />
           )}
-          {message.isPrivate && <PrivateDisclaimer text={message.privateLabel} expirationLabel={message.lifetimeLabel} />}
+          {message.isPrivate && <PrivateDisclaimer text={message.privateLabel} expirationLabel={message.lifetimeLabel} expiresSoon={message.lifetimeWarning} />}
           {message.forwardedFrom && (
             <div className="forwarded-message">
               <div className="forwarded-sender">{message.forwardedFrom.sender}</div>
@@ -289,7 +289,7 @@ export default function MessageRow({ message, activeContact, onOpenThread, onCar
                         value={card.input.value}
                         onChange={(event) => onCardInputChange?.(event.target.value)}
                         rows={12}
-                        autoFocus
+                        autoFocus={autoFocusCardInput}
                       />
                     </label>
                   )}
