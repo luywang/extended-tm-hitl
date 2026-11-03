@@ -215,7 +215,7 @@ export default function MessageRow({ message, activeContact, onOpenThread, onCar
               restricted={message.isExtendedTm}
             />
           )}
-          {message.isPrivate && <PrivateDisclaimer text={message.privateLabel} />}
+          {message.isPrivate && <PrivateDisclaimer text={message.privateLabel} expirationLabel={message.lifetimeLabel} />}
           {message.forwardedFrom && (
             <div className="forwarded-message">
               <div className="forwarded-sender">{message.forwardedFrom.sender}</div>
@@ -321,7 +321,6 @@ export default function MessageRow({ message, activeContact, onOpenThread, onCar
           {message.chainOfThought && (
             <ChainOfThought steps={message.chainOfThought} />
           )}
-          {message.lifetimeLabel && <div className="card-footer">{message.lifetimeLabel}</div>}
         </div>
         {reactions.length > 0 && (
           <div className="message-reactions-bar">

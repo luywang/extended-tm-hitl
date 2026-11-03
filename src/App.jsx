@@ -39,9 +39,9 @@ function loadDeletedMessageKeys() {
 
 function messageLifetime(expiresAt) {
   const date = new Date(expiresAt).toLocaleDateString('en-US', {
-    month: 'short', day: 'numeric', timeZone: 'America/Los_Angeles',
+    month: 'short', day: 'numeric', year: 'numeric', timeZone: 'America/Los_Angeles',
   })
-  return `Extended targeted message · 30 days + buffer · Available until ${date}`
+  return `Expires on ${date}`
 }
 
 export default function App() {
@@ -202,6 +202,7 @@ export default function App() {
       isPrivate: hitl.visibility !== 'public',
       isExtendedTm: hitl.visibility !== 'public',
       privateLabel: 'Only you and Copilot can see this message',
+      lifetimeLabel: hitl.visibility === 'public' ? undefined : messageLifetime(hitl.expiresAt),
       canUndo: !!hitl.prompt.trim(),
       reactions: hitl.visibility === 'public' ? [{ emoji: '👀', count: 1, label: 'Copilot reacted with Eyes: looking at this message' }] : undefined,
     })
@@ -216,6 +217,7 @@ export default function App() {
       isPrivate: true,
       isExtendedTm: true,
       privateLabel: 'Only you can see this message',
+      lifetimeLabel: messageLifetime(hitl.expiresAt),
       cards: [{
         title: 'Launch readiness update',
         subtitle: 'Review for Northwind launch',
@@ -223,7 +225,6 @@ export default function App() {
         badge: { text: 'Awaiting your approval', tone: 'amber' },
         sections: editing ? [] : [{ text: hitl.draftText }],
         input: editing ? { label: 'Edit draft for the group', value: hitl.editText } : null,
-        footer: messageLifetime(hitl.expiresAt),
         actions: editing ? [
           { id: 'save-edit', label: 'Save changes', primary: true, disabled: !hitl.editText.trim() },
           { id: 'cancel-edit', label: 'Cancel' },
